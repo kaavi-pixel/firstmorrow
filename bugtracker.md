@@ -6,7 +6,7 @@ This tracker records reproducible defects, fixes, and release verification. Feat
 
 ## Conventions
 
-Statuses: `open`, `in_progress`, `fixed_local`, `verified_production`, `deferred`. Severity: `critical` risks data loss or unavailable service; `high` breaks core behavior; `medium` affects a limited path; `low` is cosmetic.
+Statuses: `open`, `in_progress`, `fixed_local`, `released`, `verified_production`, `deferred`. `released` means the fix is deployed, but its specific failure case has not necessarily been reproduced safely on production. Severity: `critical` risks data loss or unavailable service; `high` breaks core behavior; `medium` affects a limited path; `low` is cosmetic.
 
 Keep IDs stable. Every fix should include reproduction steps, changed modules, regression evidence, commit or release reference, and remaining verification. Do not close a production issue based only on a local test.
 
@@ -14,13 +14,13 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 
 | ID | Severity | Status | Summary | Release impact |
 |---|---|---|---|---|
-| FM-001 | critical | fixed_local | Expired simulation worker could commit after its lock lease, with separate state/history writes | Real Redis tests passed; production advancement check pending |
+| FM-001 | critical | released | Expired simulation worker could commit after its lock lease, with separate state/history writes | Real Redis tests passed; production world advancement and reload verified |
 | FM-002 | high | open | Land routing does not yet respect fine structure and landmark obstacles | Keep autonomous travel disabled |
-| FM-003 | high | fixed_local | Legacy import would discard carried stores and exploration state | Expanded saves are now explicitly rejected by legacy import |
+| FM-003 | high | released | Legacy import would discard carried stores and exploration state | Expanded saves are explicitly rejected; no production save was imported |
 | FM-004 | medium | fixed_local | Enlarged mainland did not fit the initial mobile viewport | Verify production only if geography is enabled |
-| FM-005 | medium | fixed_local | Browser storage rejection could interrupt welcome/refresh behavior in isolated previews | Guarded storage accesses; preview browser checks passed |
-| FM-006 | high | fixed_local | A repeated proposal result could count usage and speech twice while its plan still existed | Pending-plan guard and replay/late-response regressions pass |
-| FM-007 | medium | fixed_local | Planning pause persisted when a service was reconfigured to allow planning | Explicit resume and restart regression pass |
+| FM-005 | medium | released | Browser storage rejection could interrupt welcome/refresh behavior in isolated previews | Preview and live viewer checks passed; guarded storage accesses deployed |
+| FM-006 | high | released | A repeated proposal result could count usage and speech twice while its plan still existed | Pending-plan guard and replay/late-response regressions pass; no deliberate duplicate model request on production |
+| FM-007 | medium | released | Planning pause persisted when a service was reconfigured to allow planning | Explicit resume regression passes; no live pause/resume experiment performed |
 
 ### FM-001: Lock expiry and non-atomic persistence
 
@@ -29,7 +29,7 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 - **Fix:** Token-checked atomic Redis commit and release scripts; preflight hash key types before writes. Cache updates occur only after a successful commit.
 - **Modules:** `application/lib/world.mjs`, `application/lib/redis-kv.mjs`, `application/api/index.js`.
 - **Evidence:** In-memory regressions and five actual Redis integration cases pass: valid commit/release, expired lease, wrong hash type without partial writes, malformed input, and service reload.
-- **Remaining:** Verify the deployed simulation continues advancing. Local Redis behavior does not by itself certify the hosted provider.
+- **Production evidence:** After deployment, the live state advanced from simulation minute 1037 to 1275 on day index 3, retained structure `b0-go`, and reported balanced resource totals. No destructive lease-expiry experiment was run on production.
 
 ### FM-002: Fine obstacle routing
 
@@ -77,13 +77,14 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 | Local regression suite | pass | 37 tests pass, zero skipped; evidence in `application/tests/latest-results.tap` |
 | Real Redis script execution | pass | Isolated Unix-socket Redis; no production credentials or data used |
 | Production source drift | checked | Current production still matches recovered deployment `dpl_GcAhTs1xsnpZ47zPsyRL4P81fUkK` |
-| GitHub source repository | created | Private repository; initial source push pending |
-| Production release | pending | User requested publication; exact feature flags recorded with deployment |
+| GitHub source repository | pushed | Private `kaavi-pixel/firstmorrow`, default branch `main` |
+| Production release | ready | `dpl_8xz2QzLsjVE18aL28htn83goou7V`; source `335ac632f729dc64d4d49fb3a91d613472d9dcab`; `FM_GEOGRAPHY=0` |
 | Geography/travel/boat scope | incomplete | New AI actions, fine collision, migration, dynamic weather, and boats are unfinished features; do not advertise them as released |
 
 ## Fix and deployment history
 
 - **2026-10-14:** Created tracker after source recovery and the first implementation increment. Recorded local fixes, travel-routing limitation, and release checks.
 - **2026-10-14:** Fixed FM-006/FM-007 and passed 37 tests including real Redis integration. Preparing a conservative production release with geography migration disabled; model-driven travel and boats remain unavailable.
+- **2026-10-14:** Published to [firstmorrow.world](https://firstmorrow.world), verified Vercel Ready status, HTTP 200 health, continuing live state, retained structure ID, and zero conservation discrepancies. Source commit `335ac632f729dc64d4d49fb3a91d613472d9dcab`; deployment `dpl_8xz2QzLsjVE18aL28htn83goou7V`. Geography remained disabled, with no world reset or explicit data migration.
 
 Append dated entries with commit IDs, test evidence, deployment IDs, and whether the live world was migrated. Never include credentials, private environment values, or raw user data in this file.

@@ -48,6 +48,8 @@ Daily consumption while away uses the inhabitant’s pack. Camp shelters and soc
 
 The user has authorized a production release. The conservative release keeps `FM_GEOGRAPHY=0`, preserving the current world schema and geography while shipping the tested source and reliability fixes; autonomous travel and boats are not exposed.
 
+Released on 2026-10-14 as `dpl_8xz2QzLsjVE18aL28htn83goou7V`, source commit `335ac632f729dc64d4d49fb3a91d613472d9dcab`. The 37-test suite passed, including isolated real Redis execution; production health and continuing world state were verified.
+
 Enabling geography later remains a separate migration gate. Source recovery is not a live-data backup, and passing local Redis tests is not production certification.
 
 Before a production migration:

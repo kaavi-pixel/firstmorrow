@@ -6,6 +6,8 @@ This plan implements the approved land-extension review: an Australia-inspired a
 
 Implementation update: the production source has now been recovered and inspected. Task checkboxes below reflect completed code-level work; milestone gates, Redis staging validation, model integration, and production authorization remain separate. See `hand-off.md` and `application/README.md` for current evidence and limitations.
 
+Release update: the user-authorized foundation release is live from commit `335ac632f729dc64d4d49fb3a91d613472d9dcab`, with `FM_GEOGRAPHY=0`. The full land-extension release is not complete; actual local Redis tests now pass, while geography enablement and the later feature gates remain separate. The private repository and `bugtracker.md` track continuing work.
+
 ## Problem and goals
 
 The feature should create a genuine choice between improving a settlement, investigating alternatives, and migrating. A universally better destination, automatic exploration, or arbitrary climate changes would undermine that choice.

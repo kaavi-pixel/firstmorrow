@@ -9,13 +9,14 @@ This is the live progress record for the land-extension work. Scope, task defini
 - **Approved direction:** Kavi accepted all recommendations from the land-extension review: competing regional advantages, need-driven exploration, physical relocation, practical reasons to stay, survivable starting conditions, and causal environmental changes.
 - **Planning complete:** The implementation plan and this progress tracker have been created. The original feature proposal remains unchanged.
 - **Island direction added:** Plan a large Tasmania-inspired island and smaller boat-accessible islands. Some must be visible from the mainland, others only from neighboring islands; every island must have a mainland-rooted physical discovery path.
-- **Implementation evidence:** Source inspected and recovered into `application/`. The new local suite has 29 passing tests covering geography, additive migration, travel, knowledge isolation, resource accounting, interruption, lock ownership, and sandbox baseline behavior.
+- **Implementation evidence:** Source inspected and recovered into `application/`. The suite now has 37 passing tests covering geography, additive migration, travel, knowledge isolation, resource accounting, interruption, lock ownership, real Redis execution, and sandbox baseline behavior.
 - **Available project files:** Planning documents plus the recovered and modified application source, package lock, tests, development notes, and recovery procedure. Dependencies and environment files are excluded from persistence.
 - **Verified architecture:** Vercel entry point, Redis storage, QStash scheduler, QuickJS sandbox, plain JavaScript/Canvas frontend, one AI structure builder, and five modeled inhabitants. Existing characters had visual activity but no durable travel before this increment.
 - **Working locally:** Feature-gated regional terrain, carried supplies, internal land-journey actions, timestamped individual observations, and atomic persistence adapter. The preview makes no model calls and uses only an isolated in-memory world.
 - **Not implemented:** AI travel decisions, fine obstacle collision, regional resource production, relocation/salvage, dynamic environmental effects, and actual boats. Island geometry and sighting validation are foundations only.
-- **Release state:** No deployment or live-world migration has been performed or authorized by this planning task.
-- **Release request update:** Kavi subsequently requested a GitHub repository, bug tracker, and publication to the existing domain. Private repository created at `https://github.com/kaavi-pixel/firstmorrow`; source push and conservative deployment are being prepared. Geography migration will remain disabled.
+- **Release state:** Kavi requested publication after the planning/implementation increment. A conservative foundation release is now live; no world reset or geography migration was performed.
+- **Repository:** Private `https://github.com/kaavi-pixel/firstmorrow`, default branch `main`, contains the source and tracking documents. Vercel deployment is currently CLI-driven; automatic deployments from GitHub have not been configured.
+- **Release verification:** 37 tests pass with no skips, including actual local Redis scripts. Live health returned HTTP 200; existing structure `b0-go` remained; simulation time advanced and all resource conservation discrepancies were zero.
 
 ## Resume here
 
@@ -73,7 +74,7 @@ Replace `unverified` with actual module/file references and a short explanation 
 | Coastal visibility / island generation | `validateIslandDiscovery`, `visibleIslands` | Rooted graph, lookout reachability, landmass occlusion; no marine feasibility validation yet |
 | Vessel construction / marine travel | Not implemented | Must add validated buoyancy/load/propulsion before enabling islands |
 | Renderer and timeline | `public/art.js`, `public/app.js`, `daySnapshot` | Existing Canvas appearance retained; historical exploration snapshots added |
-| Tests and fixtures | `tests/*.test.mjs` | `npm test`: 29 pass; desktop/mobile preview exercised with Playwright |
+| Tests and fixtures | `tests/*.test.mjs` | `npm test`: 37 pass, no skips; desktop/mobile preview and production viewer checked |
 
 ## Decision log
 
@@ -163,21 +164,29 @@ Allowed results: `not_run`, `pass`, `fail`, `blocked`. Record the command/scenar
 - **Release state:** No production deployment, world reset, live-state migration, or model API call. Existing app preview is the intended review surface, not the Vercel production site.
 - **Next:** Fine obstacle routing and model-context/action integration, then staged Redis validation before any live enablement. Do not mark all plan milestones complete based on this increment.
 
+### 2026-10-14: Repository, bug tracker, and conservative production release
+
+- **Requested and completed:** Created private GitHub repository, added `bugtracker.md`, and deployed the tested source to the existing Vercel project and custom domain.
+- **Fixes:** FM-006 proposal replay protection and FM-007 explicit planning resume. Added actual Redis integration tests for the earlier atomic persistence fix.
+- **Evidence:** 37 passing tests, no skips. Production health HTTP 200; live browser had no page errors; structure ID `b0-go` retained; simulation advanced; all resource balances zero.
+- **Deployed source:** `335ac632f729dc64d4d49fb3a91d613472d9dcab`.
+- **Deployment:** `dpl_8xz2QzLsjVE18aL28htn83goou7V`, Ready, aliases `firstmorrow.world` and `www.firstmorrow.world`.
+- **Scope:** `FM_GEOGRAPHY=0`; no new terrain, autonomous travel, or boats enabled. This is not completion of the full M6 land-extension release gate.
+- **Next:** Continue fine obstacle routing and model-action integration. Enabling geography remains a separate migration/backup decision.
+
 Append a new dated entry after each meaningful implementation session. Include task IDs, source/version references, tests and outcomes, decisions, unresolved problems, and the next exact action.
 
 ## Release record
 
-No release exists for this work yet. Fill this section during M6 and each later rollout.
-
-Release preparation: 37 tests pass with none skipped. `bugtracker.md` records FM-001–FM-007, including the two newly fixed proposal replay/resume defects. The requested production deployment uses geography disabled and does not reset or migrate the world.
+A conservative foundation release is live. The complete land-extension release remains unfinished; the deployed code keeps geography disabled and does not reset or explicitly migrate the world.
 
 | Field | Current value |
 |---|---|
-| Source version | Recovered baseline `dpl_GcAhTs1xsnpZ47zPsyRL4P81fUkK` plus local tracked modifications |
+| Source version | GitHub commit `335ac632f729dc64d4d49fb3a91d613472d9dcab` |
 | Schema version / migration | Existing world v3; additive geography/exploration v1, tested locally |
-| Deployment identity / environment | Vercel project verified; this increment runs only in an isolated local preview |
-| Enabled feature flags | `FM_GEOGRAPHY=1`, `FM_PREVIEW=1` in preview only; production unchanged |
+| Deployment identity / environment | Production `dpl_8xz2QzLsjVE18aL28htn83goou7V`, project `prj_SgYPXt92l6DGcoLanupudRiRsMuO` |
+| Enabled feature flags | Production `FM_GEOGRAPHY=0`; isolated preview uses geography on and model calls off |
 | Backup and restore verification | Not performed |
 | Core verification gate | Not run |
-| Production authorization | Not obtained |
-| Rollout / rollback outcome | Not performed |
+| Production authorization | User explicitly requested publication to firstmorrow.world |
+| Rollout / rollback outcome | Ready and verified; no rollback needed; no geography migration performed |
