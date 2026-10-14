@@ -21,7 +21,7 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 | FM-005 | medium | released | Browser storage rejection could interrupt welcome/refresh behavior in isolated previews | Preview and live viewer checks passed; guarded storage accesses deployed |
 | FM-006 | high | released | A repeated proposal result could count usage and speech twice while its plan still existed | Pending-plan guard and replay/late-response regressions pass; no deliberate duplicate model request on production |
 | FM-007 | medium | released | Planning pause persisted when a service was reconfigured to allow planning | Explicit resume regression passes; no live pause/resume experiment performed |
-| FM-008 | medium | fixed_local | Live response reused persisted commit time as the current server clock, restarting client interpolation on each poll | Fresh response time and no-store live caching; regression passes; follow-up deployment pending |
+| FM-008 | medium | verified_production | Live response reused persisted commit time as the current server clock, restarting client interpolation on each poll | Fresh response time and no-store live caching; regression and production response checks pass |
 
 ### FM-001: Lock expiry and non-atomic persistence
 
@@ -84,9 +84,9 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 |---|---|---|
 | Local regression suite | pass | 55 tests pass, zero skipped; evidence in `application/tests/latest-results.tap` |
 | Real Redis script execution | pass | Isolated Unix-socket Redis; no production credentials or data used |
-| Production source drift | checked | Existing Vercel project and aliases preserved; initial pilot source `d6b9275` deployed |
+| Production source drift | checked | Existing Vercel project and aliases preserved; source `aa7b5d5` deployed |
 | GitHub source repository | pushed | Private `kaavi-pixel/firstmorrow`, default branch `main` |
-| Production release | ready | Initial pilot `dpl_5hRmMu4eyuKGTFv5YKjuVQeXaB73`; geography and autonomous scouting enabled; clock-fix follow-up pending |
+| Production release | ready | `dpl_2a8ySZ1fBgfbmb48shGwoRhDSibT`; geography and autonomous scouting enabled, clock fix included |
 | Geography/travel/boat scope | partial release | Autonomous short scouting enabled; physical regional production, relocation, weather and boats remain unfinished |
 
 ## Fix and deployment history
@@ -98,4 +98,4 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 Append dated entries with commit IDs, test evidence, deployment IDs, and whether the live world was migrated. Never include credentials, private environment values, or raw user data in this file.
 
 - **2026-10-14:** Released FM-002 with the autonomous mainland pilot, source `d6b9275`, deployment `dpl_5hRmMu4eyuKGTFv5YKjuVQeXaB73`. Atomic migration checkpoint succeeded, existing structure persisted, all balances zero. First live model decision was a reasoned stay, not a forced scout.
-- **2026-10-14:** Live QA identified FM-008 clock interpolation resets. Fixed fresh response clocks and caching, increasing the suite to 55 passing tests; follow-up deployment pending.
+- **2026-10-14:** Live QA identified FM-008 clock interpolation resets. Fixed fresh response clocks and caching, increasing the suite to 55 passing tests. Follow-up `dpl_2a8ySZ1fBgfbmb48shGwoRhDSibT`, source `aa7b5d5`, is Ready. Production returns fresh `serverNow`, `Cache-Control: no-store`, continued world progress and zero resource discrepancies.

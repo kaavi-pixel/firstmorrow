@@ -184,7 +184,8 @@ Append a new dated entry after each meaningful implementation session. Include t
 - **Initial deployment:** `dpl_5hRmMu4eyuKGTFv5YKjuVQeXaB73`, source `d6b927504adcde625ad6b65d4922b3e125528c32`, Ready. Enabled `FM_GEOGRAPHY=1`, `FM_EXPLORATION=1`, `FM_MAINTENANCE=0`. Boats disabled.
 - **Live evidence:** Additive migration at day index 5, minute 557; atomic checkpoint marker persisted. Structure `b0-go` retained. At day index 5, minute 719, all balances were zero and Ada had chosen to stay at camp using the live provider.
 - **Browser evidence:** Desktop/mobile, decision cards, carried inventory, log, themes, rotation/pan/zoom and historical day 0 inspected. Historical pre-migration views omit geography/knowledge. No page errors or horizontal overflow.
-- **QA follow-up:** Found pre-existing FM-008: cached commit time was reused as request time, restarting client prediction on polls. Added fresh no-store API clocks and a regression; a follow-up deployment ships this fix.
+- **QA follow-up:** Found pre-existing FM-008: cached commit time was reused as request time, restarting client prediction on polls. Added fresh no-store API clocks and a regression. Follow-up `dpl_2a8ySZ1fBgfbmb48shGwoRhDSibT`, source `aa7b5d5`, is Ready; live no-store headers and fresh response timestamps verified.
+- **Natural behavior:** Ada chose to stay, citing the unfinished shelter. Ren's next provider reply failed the short-reason contract and was safely rejected without starting travel or spending provisions. Monitor invalid-response frequency before increasing the request budget; do not turn rejection into a forced scout.
 - **Next:** Monitor natural choices and establish physical regional production before permanent migration. No claim that a naturally chosen scouting expedition has yet completed in production; controlled round trips are separately verified.
 
 ## Release record
@@ -193,11 +194,11 @@ The mainland exploration pilot is live. The complete land-extension roadmap rema
 
 | Field | Current value |
 |---|---|
-| Source version | Initial pilot `d6b927504adcde625ad6b65d4922b3e125528c32`; clock-fix follow-up pending |
+| Source version | GitHub commit `aa7b5d5`; initial pilot was `d6b927504adcde625ad6b65d4922b3e125528c32` |
 | Schema version / migration | World v3 retained; additive geography/exploration v1 migrated at day index 5, minute 557 |
-| Deployment identity / environment | Production `dpl_5hRmMu4eyuKGTFv5YKjuVQeXaB73`, project `prj_SgYPXt92l6DGcoLanupudRiRsMuO` |
+| Deployment identity / environment | Production `dpl_2a8ySZ1fBgfbmb48shGwoRhDSibT`, project `prj_SgYPXt92l6DGcoLanupudRiRsMuO` |
 | Enabled feature flags | `FM_GEOGRAPHY=1`, `FM_EXPLORATION=1`, `FM_MAINTENANCE=0`; islands disabled |
 | Backup and restore verification | Private atomic pre-migration Redis checkpoint; isolated exact restore passes; no production restore performed |
 | Core verification gate | This bounded scouting pilot passed; full M6 roadmap gate remains later work |
 | Production authorization | User explicitly requested publication to firstmorrow.world |
-| Rollout / rollback outcome | Ready and verified; no reset or rollback; follow-up viewer clock fix preparing |
+| Rollout / rollback outcome | Ready and verified including fresh response clocks; no reset or rollback. Live advanced from day index 5/minute 719 to 954 with balanced resources |

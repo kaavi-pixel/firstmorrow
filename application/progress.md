@@ -42,4 +42,16 @@ Added geography and exploration modules, feature-gated additive migration, regio
 
 `npm test` passes 29 tests. The browser preview is isolated, makes no model calls, and explicitly labels itself as a development preview. Desktop and mobile QA exercised rotation, zoom, people selection, panels, theme, and API rejection paths; no page errors were observed.
 
-Outstanding: fine obstacle routing, model-action integration, regional physical stock allocation, relocation/salvage, weather feedback, and all vessel functionality. Do not deploy this increment to production or claim the complete implementation plan is finished.
+At that first increment, obstacle routing and model integration were still outstanding. The later release below supersedes that restriction; regional physical production, relocation/salvage, weather and vessels remain unfinished.
+
+## 2026-10-14: Published scouting pilot
+
+Completed shared physical occupancy, safe anchor migration, per-minute route revalidation, construction reservations and private-context model decisions. Short scouts carry tracked supplies and physically return without needing a second provider response. Person cards show observations, supplies, reasons and outcomes; the timeline preserves historical exploration snapshots.
+
+Final suite: 55 passing tests, no skips. Actual Redis checkpoint/restore tests pass. A read-only clone of production completed two simulation days, six controlled scouts, four stays, 170 persistence round-trips and zero balance discrepancies. Browser QA covered desktop/mobile, card scrolling, scouting/return states, log, World balances, light/dark, rotation/pan/zoom and historical day 0. No page errors, horizontal overflow or clipped initial map were found. Controlled fixtures do not claim a naturally chosen live scout.
+
+Published initial pilot `dpl_5hRmMu4eyuKGTFv5YKjuVQeXaB73`, then clock correction `dpl_2a8ySZ1fBgfbmb48shGwoRhDSibT`, source `aa7b5d5`. Live flags enable geography and autonomous short scouting; boats remain disabled. Migration checkpoint was captured atomically, existing `b0-go` remains, and conservation errors are zero. Ada's first live decision was to stay and help with shelter.
+
+FM-008 found during final live QA: a persisted commit timestamp was returned as current server time. Fixed with a fresh request timestamp and no-store live responses, preventing interpolation resets on polling. The private preview remains an isolated no-model-call world; its existing guarded browser-storage fallback was manually tested because the static preview validator flags that guarded API.
+
+Next: monitor natural decisions and rejection rates, then implement physical regional production before migration/salvage. Do not reset the world or overwrite the private migration checkpoint.
