@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Firstmorrow</title>
+  <meta name="description" content="Five people, bare land, and an AI builder. One shared world that keeps running.">
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./base.css"><link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <canvas id="world" aria-label="The world. Drag to move, right-drag or twist to rotate, scroll or pinch to zoom, tap a person or structure."></canvas>
+
+  <header class="hud hud-left">
+    <span class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 23h24M8 18a8 8 0 0 1 16 0M16 3v4M4 8l3 3M28 8l-3 3M6 27h20" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>firstmorrow</span>
+    <span class="clock"><span id="day">Day 1</span><span id="time">06:00</span></span>
+  </header>
+  <span id="status" class="hud hud-right pill"><span class="dot live"></span><span id="status-label">Live</span></span>
+
+  <div id="project" class="hud project" hidden><span id="project-name"></span><span class="bar"><i id="project-bar"></i></span><span id="project-left" class="mono"></span></div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <nav class="dock" aria-label="Controls">
+    <div class="timeline"><label for="scrub" class="sr-only">Day</label><input id="scrub" type="range" min="0" max="0" value="0" step="1"><span id="scrub-label" class="mono">Live</span></div>
+    <span class="sep"></span>
+    <button class="dock-btn" id="rotate" aria-label="Rotate view" title="Rotate (Q, E)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M12.5 1.8v3h-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>
+    <button class="dock-btn" data-panel="people">People</button>
+    <button class="dock-btn" data-panel="stock">World</button>
+    <button class="dock-btn" data-panel="log">Log</button>
+    <button class="dock-btn" data-panel="settings" aria-label="Settings"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.4"/></svg></button>
+  </nav>
+
+  <article id="card" class="card" hidden></article>
+
+  <aside id="panel" class="panel" hidden>
+    <div class="panel-head"><h2 id="panel-title"></h2><button class="x" data-close="panel" aria-label="Close">×</button></div>
+
+    <section data-view="people"><div id="people-list" class="rows"></div></section>
+
+    <section data-view="stock">
+      <div id="stock" class="stock"></div>
+      <button id="assumptions-toggle" class="link">How the physics works</button>
+      <div id="assumptions" class="prose" hidden>
+        <p>Builders only request actions. A protected engine decides what physically happens, and checks that water, energy, food and materials are conserved.</p>
+        <p><strong>Time.</strong> One real second is one minute here. Building takes 0.5 person-hours per kilogram, with three people working 8 hours a day, one structure at a time. These labor rates are assumptions.</p>
+        <p><strong>Water.</strong> A finite 100,000 L aquifer. Pumping costs m·g·H / efficiency (20 m head, 50%). <a href="https://www.grundfos.com/uk/learn/research-and-insights/power-factor" target="_blank" rel="noopener noreferrer">Source</a></p>
+        <p><strong>Solar.</strong> Area × 5 kWh/m²/day × 20% efficiency × 0.85 performance. 40 kWh battery. <a href="https://www.energy.gov/sites/prod/files/2020/05/f75/1_Jimenez_Solar.pdf" target="_blank" rel="noopener noreferrer">Source</a></p>
+        <p><strong>Crops.</strong> Irrigation follows FAO-56 Penman–Monteith evapotranspiration. Harvest after 30 well-watered days. Yield is an uncalibrated proxy. <a href="https://www.fao.org/fileadmin/user_upload/faowater/docs/ReferenceManualETo.pdf" target="_blank" rel="noopener noreferrer">Source</a></p>
+        <p><strong>People.</strong> 15 L water, 2,100 kcal and 3.5 m² shelter per person per day, from humanitarian minimums. <a href="https://spherestandards.org/wp-content/uploads/Sphere-Handbook-2000-English.pdf" target="_blank" rel="noopener noreferrer">Source</a></p>
+        <p><strong>Space.</strong> Tiles are 8 m. Nothing is built on the oasis, rocks or dunes, and every structure keeps one empty tile around it. Sphere asks for at least 2 m between buildings, preferably twice their height, so a fire or collapse cannot reach the next one. <a href="http://shelterprojects.org/other/siteplanning/site-planning-references/Sphere%20Project%20Handbook%202011%20-%20Shelter%20and%20Settlements.pdf" target="_blank" rel="noopener noreferrer">Source</a></p>
+        <p class="muted">Weather is fixed and fictional. Wellbeing scores are a simple model, not a measure of happiness.</p>
+        <pre id="balance" class="mono"></pre>
+      </div>
+    </section>
+
+    <section data-view="log"><ol id="log" class="log"></ol></section>
+
+    <section data-view="settings">
+      <h3>About</h3>
+      <p id="preview-note" class="muted small" hidden>Development preview only. This in-memory world is separate from production, makes no model calls, and may reset. Regional terrain is implemented; autonomous travel and boats are not enabled.</p>
+      <p class="muted small">One shared world that keeps running when nobody is watching. Everyone sees the same day.</p>
+      <p class="muted small">Every structure is designed by <span id="agent-model">an AI</span>, at most <span id="agent-cap">24</span> proposals a day. Its code runs in a sandbox on the server.</p>
+      <p class="muted small">Drag the timeline to see any past day as it ended.</p>
+      <dl class="facts"><div><dt>Running since</dt><dd id="since">–</dd></div><div><dt>Proposals today</dt><dd id="cap-used">–</dd></div></dl>
+      <div class="row"><button id="theme" class="btn">Theme</button></div>
+    </section>
+  </aside>
+
+  <div id="welcome" class="welcome" hidden>
+    <div class="welcome-card">
+      <h1>Five people. Bare land.</h1>
+      <p>An AI designs every structure. People build them by hand, so it takes days. The world keeps going while you are away.</p>
+      <div class="row"><button id="begin" class="btn primary">Watch</button></div>
+    </div>
+  </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,6 @@
+data
+output
+tests
+node_modules
+*.log
+progress.md

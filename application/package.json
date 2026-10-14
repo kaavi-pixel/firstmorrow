@@ -1,0 +1,19 @@
+{
+  "name": "firstmorrow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@upstash/qstash": "^2.12.0",
+    "@upstash/redis": "^1.39.0",
+    "@vercel/functions": "^3.9.11",
+    "quickjs-emscripten": "^0.32.0"
+  }
+}
