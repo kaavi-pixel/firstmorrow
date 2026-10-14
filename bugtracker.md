@@ -15,12 +15,13 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 | ID | Severity | Status | Summary | Release impact |
 |---|---|---|---|---|
 | FM-001 | critical | released | Expired simulation worker could commit after its lock lease, with separate state/history writes | Real Redis tests passed; production world advancement and reload verified |
-| FM-002 | high | fixed_local | Land routing ignored structure and landmark obstacles | Shared occupancy, safe camp anchor, route revalidation and construction reservations tested; rollout pending |
+| FM-002 | high | released | Land routing ignored structure and landmark obstacles | Shared occupancy, safe camp anchor, route revalidation and construction reservations tested; autonomous pilot enabled |
 | FM-003 | high | released | Legacy import would discard carried stores and exploration state | Expanded saves are explicitly rejected; no production save was imported |
-| FM-004 | medium | fixed_local | Enlarged mainland did not fit the initial mobile viewport | Verify production only if geography is enabled |
+| FM-004 | medium | verified_production | Enlarged mainland did not fit the initial mobile viewport | Live expanded map inspected at 390×844 with no clipping or horizontal overflow |
 | FM-005 | medium | released | Browser storage rejection could interrupt welcome/refresh behavior in isolated previews | Preview and live viewer checks passed; guarded storage accesses deployed |
 | FM-006 | high | released | A repeated proposal result could count usage and speech twice while its plan still existed | Pending-plan guard and replay/late-response regressions pass; no deliberate duplicate model request on production |
 | FM-007 | medium | released | Planning pause persisted when a service was reconfigured to allow planning | Explicit resume regression passes; no live pause/resume experiment performed |
+| FM-008 | medium | fixed_local | Live response reused persisted commit time as the current server clock, restarting client interpolation on each poll | Fresh response time and no-store live caching; regression passes; follow-up deployment pending |
 
 ### FM-001: Lock expiry and non-atomic persistence
 
@@ -70,16 +71,23 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 - **Expected:** The explicit current service setting wins; planning resumes.
 - **Fix/evidence:** The enabled service explicitly removes `planningPaused`. A persisted-world restart test confirms a new plan starts after re-enabling.
 
+### FM-008: Live clock jumps backward between polls
+
+- **Reproduction:** Read the same persisted live snapshot twice, 20 seconds apart. Previously both responses reported the old commit timestamp as `serverNow`; the viewer reset its interpolation to that timestamp on every response.
+- **Impact:** Clock, construction preview and newly added travel prediction could appear to move backward until the next authoritative simulation tick.
+- **Fix:** `lib/api.mjs` now attaches the current request time without changing the saved snapshot and uses `Cache-Control: no-store` for live responses. Historical days and static structure caching are unchanged.
+- **Evidence:** `tests/api.test.mjs` verifies advancing response clocks over identical saved state and the no-store header.
+
 ## Release checks and non-bug gaps
 
 | Check | State | Notes |
 |---|---|---|
-| Local regression suite | pass | 54 tests pass, zero skipped; evidence in `application/tests/latest-results.tap` |
+| Local regression suite | pass | 55 tests pass, zero skipped; evidence in `application/tests/latest-results.tap` |
 | Real Redis script execution | pass | Isolated Unix-socket Redis; no production credentials or data used |
-| Production source drift | checked | Previous foundation release `dpl_8xz2QzLsjVE18aL28htn83goou7V`; latest receipt will be recorded after rollout |
+| Production source drift | checked | Existing Vercel project and aliases preserved; initial pilot source `d6b9275` deployed |
 | GitHub source repository | pushed | Private `kaavi-pixel/firstmorrow`, default branch `main` |
-| Production release | ready | `dpl_8xz2QzLsjVE18aL28htn83goou7V`; source `335ac632f729dc64d4d49fb3a91d613472d9dcab`; `FM_GEOGRAPHY=0` |
-| Geography/travel/boat scope | staged | Autonomous short scouting is implemented; physical regional production, relocation, weather and boats remain unfinished |
+| Production release | ready | Initial pilot `dpl_5hRmMu4eyuKGTFv5YKjuVQeXaB73`; geography and autonomous scouting enabled; clock-fix follow-up pending |
+| Geography/travel/boat scope | partial release | Autonomous short scouting enabled; physical regional production, relocation, weather and boats remain unfinished |
 
 ## Fix and deployment history
 
@@ -88,3 +96,6 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 - **2026-10-14:** Published to [firstmorrow.world](https://firstmorrow.world), verified Vercel Ready status, HTTP 200 health, continuing live state, retained structure ID, and zero conservation discrepancies. Source commit `335ac632f729dc64d4d49fb3a91d613472d9dcab`; deployment `dpl_8xz2QzLsjVE18aL28htn83goou7V`. Geography remained disabled, with no world reset or explicit data migration.
 
 Append dated entries with commit IDs, test evidence, deployment IDs, and whether the live world was migrated. Never include credentials, private environment values, or raw user data in this file.
+
+- **2026-10-14:** Released FM-002 with the autonomous mainland pilot, source `d6b9275`, deployment `dpl_5hRmMu4eyuKGTFv5YKjuVQeXaB73`. Atomic migration checkpoint succeeded, existing structure persisted, all balances zero. First live model decision was a reasoned stay, not a forced scout.
+- **2026-10-14:** Live QA identified FM-008 clock interpolation resets. Fixed fresh response clocks and caching, increasing the suite to 55 passing tests; follow-up deployment pending.

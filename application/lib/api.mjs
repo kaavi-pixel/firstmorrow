@@ -6,7 +6,6 @@ export function send(res, status, payload, extra = {}) {
   res.end(typeof payload === 'string' ? payload : JSON.stringify(payload));
 }
 const forever = { 'Cache-Control': 'public, max-age=3600, s-maxage=31536000, immutable' };
-const shortly = { 'Cache-Control': 'public, max-age=5, s-maxage=15, stale-while-revalidate=30' };
 const STALE_MS = 150000;
 
 // service: createWorldService(); authorizeTick(req, rawBody) -> boolean; background(promise) keeps work alive after responding.
@@ -22,7 +21,10 @@ export function createApi({ service, authorizeTick, background = p => p.catch(()
         const simAt = raw ? JSON.parse(raw).simAt : 0;
         if ((!raw || now - simAt > STALE_MS) && now - lastKick > 60000) { lastKick = now; background(service.tick()); }
         if (!raw) return send(res, 503, { error: 'The world is starting. Try again in a few seconds.' }, { 'Retry-After': '5' });
-        return send(res, 200, raw, shortly);
+        // The persisted serverNow belongs to the last simulation commit, not
+        // this response. Reusing it makes client prediction jump backwards on
+        // every poll. Supply request time and forbid stale live-clock caching.
+        return send(res, 200, { ...JSON.parse(raw), serverNow: now });
       }
       if (path === '/api/buildings' && req.method === 'GET') {
         const want = Number(url.searchParams.get('n'));

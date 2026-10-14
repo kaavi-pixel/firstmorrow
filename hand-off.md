@@ -9,14 +9,14 @@ This is the live progress record for the land-extension work. Scope, task defini
 - **Approved direction:** Kavi accepted all recommendations from the land-extension review: competing regional advantages, need-driven exploration, physical relocation, practical reasons to stay, survivable starting conditions, and causal environmental changes.
 - **Planning complete:** The implementation plan and this progress tracker have been created. The original feature proposal remains unchanged.
 - **Island direction added:** Plan a large Tasmania-inspired island and smaller boat-accessible islands. Some must be visible from the mainland, others only from neighboring islands; every island must have a mainland-rooted physical discovery path.
-- **Implementation evidence:** 54 tests pass with no skips, including obstacle rerouting, safe camp migration, private provider context, typed decisions, stale/replayed responses, round-trip return, real Redis backup/restore and all previous regressions.
+- **Implementation evidence:** 55 tests pass with no skips, including obstacle rerouting, safe camp migration, private provider context, typed decisions, stale/replayed responses, round-trip return, real Redis backup/restore, fresh API response clocks and previous regressions.
 - **Available project files:** Planning documents plus the recovered and modified application source, package lock, tests, development notes, and recovery procedure. Dependencies and environment files are excluded from persistence.
 - **Verified architecture:** Vercel entry point, Redis storage, QStash scheduler, QuickJS sandbox, plain JavaScript/Canvas frontend, one AI structure builder, and five modeled inhabitants. Existing characters had visual activity but no durable travel before this increment.
 - **Implemented:** Shared movement obstacles, safe camp anchor, timestamped individual observations, typed autonomous stay/scout/return decisions, conserved supplies, automatic physical return and decision cards. The private preview makes no model calls and uses an isolated in-memory world.
 - **Not implemented:** Regional resource production, permanent relocation/salvage, dynamic environmental effects, and boats. Island geometry and sighting validation are foundations only.
-- **Release state:** Kavi requested publication after the planning/implementation increment. A conservative foundation release is now live; no world reset or geography migration was performed.
+- **Release state:** Mainland geography and autonomous short scouting are live. The existing world was additively migrated, not reset; its pre-migration checkpoint is stored privately in Redis.
 - **Repository:** Private `https://github.com/kaavi-pixel/firstmorrow`, default branch `main`, contains the source and tracking documents. Vercel deployment is currently CLI-driven; automatic deployments from GitHub have not been configured.
-- **Release verification:** 37 tests pass with no skips, including actual local Redis scripts. Live health returned HTTP 200; existing structure `b0-go` remained; simulation time advanced and all resource conservation discrepancies were zero.
+- **Release verification:** HTTP 200 health, geography v1, autonomous decisions enabled, migration checkpoint marker persisted, existing `b0-go` retained, continuing simulation, zero balance errors and no browser errors. Ada's first real model decision was to stay and help with the Shelter Hub, with its reason recorded.
 
 ## Resume here
 
@@ -37,7 +37,7 @@ Allowed status values: `not_started`, `in_progress`, `blocked`, `done`. Only use
 | Milestone | Status | Tasks | Evidence / blocker |
 |---|---|---|---|
 | M0: Discovery | in_progress | LE-00A–LE-00D | A/B/D complete; remaining decisions and live recovery validation not approved |
-| M1: Terrain and start | in_progress | LE-10A–LE-10D | Code-level fixtures and V01/V02 pass; final visible scope/M0 gate outstanding |
+| M1: Terrain and start | done | LE-10A–LE-10D | Documented mainland pilot migrated without changing original structures or stocks |
 | M2: Travel and knowledge | done | LE-20A–LE-20D | Land routing, private model context, persistence, interruption and round-trip tests pass |
 | M3: Autonomous decisions | done | LE-30A–LE-30D | Controlled stay/scout fixtures pass; natural-agent rollout remains separately verified below |
 | M4: Migration and salvage | not_started | LE-40A–LE-40D | Depends on M3 and construction contract |
@@ -75,7 +75,7 @@ Replace `unverified` with actual module/file references and a short explanation 
 | Coastal visibility / island generation | `validateIslandDiscovery`, `visibleIslands` | Rooted graph, lookout reachability, landmass occlusion; no marine feasibility validation yet |
 | Vessel construction / marine travel | Not implemented | Must add validated buoyancy/load/propulsion before enabling islands |
 | Renderer and timeline | `public/art.js`, `public/app.js`, `daySnapshot` | Existing Canvas appearance retained; historical exploration snapshots added |
-| Tests and fixtures | `tests/*.test.mjs`, `tests/live-clone-pilot.mjs` | 54 pass, no skips; two-day live-state clone pilot, 6 scouts, 4 stays, 170 restarts, zero balance errors |
+| Tests and fixtures | `tests/*.test.mjs`, `tests/live-clone-pilot.mjs` | 55 pass, no skips; two-day live-state clone pilot, 6 scouts, 4 stays, 170 restarts, zero balance errors |
 
 ## Decision log
 
@@ -113,8 +113,8 @@ Allowed results: `not_run`, `pass`, `fail`, `blocked`. Record the command/scenar
 | V05: Autonomous choices | pass | Controlled staying/scouting fixtures; separate natural-agent release check |
 | V06: Salvage accounting | not_run | None |
 | V07: Retained structures / ownership | not_run | None |
-| V08: Retries and concurrent actions | blocked | In-memory and actual local Redis lease/reload tests pass; hosted-provider release check and later action types remain |
-| V09: Restart and cancellation | blocked | Land-journey restart/cancel tests pass; salvage and sea paths not yet implemented |
+| V08: Retries and concurrent actions | pass | Land decisions and state commits tested for leases, concurrency, duplicate replies and restart; normal hosted commit verified, no destructive production fault injection |
+| V09: Restart and cancellation | pass | Land journeys, cancellation and round-trip returns pass; sea/salvage interruptions belong to later milestones |
 | V10: Causal weather | not_run | None |
 | V11: Observer event accuracy | not_run | None |
 | V12: Shared reports | not_run | Follow-up |
@@ -134,7 +134,7 @@ Allowed results: `not_run`, `pass`, `fail`, `blocked`. Record the command/scenar
 - **Source baseline:** Source is now durable in the project. Preserve the existing Vercel and app identities; do not reconstruct from screenshots or start a new app.
 - **Persistence safety:** Atomic commit and lease ownership checks now pass actual local Redis integration cases. Hosted-provider release verification remains separate.
 - **Construction compatibility:** Existing agent-designed structures may not expose enough material metadata for salvage. Do not invent recoverable quantities or replace the system with predefined buildings.
-- **Knowledge leakage:** A private-view function is tested; M3 must use it rather than the global observer payload for new decision prompts and action responses.
+- **Knowledge leakage:** The travel provider now receives only the tested private view. Keep that boundary when adding reports, extraction or relocation.
 - **Behavioral railroading:** Avoid requiring agents to explore or forcing a preferred region through a universal score. Use controlled fixtures to test capabilities, then inspect natural behavior.
 - **Scope growth:** Stage reports, outposts, portability, and environmental feedback after the core release. Avoid turning this extension into a replacement physics or climate engine.
 - **Island discoverability:** A coastline silhouette is insufficient if its lookout cannot be reached, its route cannot be sailed, or its landing is unusable. Validate visibility and physical access together; never repair this by leaking hidden coordinates.
@@ -177,17 +177,27 @@ Allowed results: `not_run`, `pass`, `fail`, `blocked`. Record the command/scenar
 
 Append a new dated entry after each meaningful implementation session. Include task IDs, source/version references, tests and outcomes, decisions, unresolved problems, and the next exact action.
 
+### 2026-10-14: Autonomous mainland scouting pilot
+
+- **Completed:** LE-20A/D and LE-30A–D. Shared obstacle rules, safe legacy camp anchor, route revalidation, construction reservations, typed private-knowledge decisions, conserved round trips and observer decision cards.
+- **Evidence:** 55 tests, zero skips. Two-day read-only live-state clone pilot: six controlled scouts, four stays, 170 persistence round-trips, zero resource discrepancies. Real Redis checkpoint and exact isolated restore passed.
+- **Initial deployment:** `dpl_5hRmMu4eyuKGTFv5YKjuVQeXaB73`, source `d6b927504adcde625ad6b65d4922b3e125528c32`, Ready. Enabled `FM_GEOGRAPHY=1`, `FM_EXPLORATION=1`, `FM_MAINTENANCE=0`. Boats disabled.
+- **Live evidence:** Additive migration at day index 5, minute 557; atomic checkpoint marker persisted. Structure `b0-go` retained. At day index 5, minute 719, all balances were zero and Ada had chosen to stay at camp using the live provider.
+- **Browser evidence:** Desktop/mobile, decision cards, carried inventory, log, themes, rotation/pan/zoom and historical day 0 inspected. Historical pre-migration views omit geography/knowledge. No page errors or horizontal overflow.
+- **QA follow-up:** Found pre-existing FM-008: cached commit time was reused as request time, restarting client prediction on polls. Added fresh no-store API clocks and a regression; a follow-up deployment ships this fix.
+- **Next:** Monitor natural choices and establish physical regional production before permanent migration. No claim that a naturally chosen scouting expedition has yet completed in production; controlled round trips are separately verified.
+
 ## Release record
 
-A conservative foundation release is live. The complete land-extension release remains unfinished; the deployed code keeps geography disabled and does not reset or explicitly migrate the world.
+The mainland exploration pilot is live. The complete land-extension roadmap remains unfinished; regional extraction, relocation, weather and boats are not enabled.
 
 | Field | Current value |
 |---|---|
-| Source version | GitHub commit `335ac632f729dc64d4d49fb3a91d613472d9dcab` |
-| Schema version / migration | Existing world v3; additive geography/exploration v1, tested locally |
-| Deployment identity / environment | Production `dpl_8xz2QzLsjVE18aL28htn83goou7V`, project `prj_SgYPXt92l6DGcoLanupudRiRsMuO` |
-| Enabled feature flags | Production `FM_GEOGRAPHY=0`; isolated preview uses geography on and model calls off |
-| Backup and restore verification | Not performed |
-| Core verification gate | Not run |
+| Source version | Initial pilot `d6b927504adcde625ad6b65d4922b3e125528c32`; clock-fix follow-up pending |
+| Schema version / migration | World v3 retained; additive geography/exploration v1 migrated at day index 5, minute 557 |
+| Deployment identity / environment | Production `dpl_5hRmMu4eyuKGTFv5YKjuVQeXaB73`, project `prj_SgYPXt92l6DGcoLanupudRiRsMuO` |
+| Enabled feature flags | `FM_GEOGRAPHY=1`, `FM_EXPLORATION=1`, `FM_MAINTENANCE=0`; islands disabled |
+| Backup and restore verification | Private atomic pre-migration Redis checkpoint; isolated exact restore passes; no production restore performed |
+| Core verification gate | This bounded scouting pilot passed; full M6 roadmap gate remains later work |
 | Production authorization | User explicitly requested publication to firstmorrow.world |
-| Rollout / rollback outcome | Ready and verified; no rollback needed; no geography migration performed |
+| Rollout / rollback outcome | Ready and verified; no reset or rollback; follow-up viewer clock fix preparing |

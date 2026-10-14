@@ -3,283 +3,288 @@
 > node --test tests/*.test.mjs
 
 TAP version 13
-# Subtest: FM-002 safe anchor preserves legacy building coordinates and resource stocks
-ok 1 - FM-002 safe anchor preserves legacy building coordinates and resource stocks
+# Subtest: FM-008 live response uses fresh server time without changing persisted state
+ok 1 - FM-008 live response uses fresh server time without changing persisted state
   ---
-  duration_ms: 10.257188
+  duration_ms: 2.503289
+  ...
+# Subtest: FM-002 safe anchor preserves legacy building coordinates and resource stocks
+ok 2 - FM-002 safe anchor preserves legacy building coordinates and resource stocks
+  ---
+  duration_ms: 15.756867
   ...
 # Subtest: FM-002 route avoids structures and landmarks while allowing access gaps
-ok 2 - FM-002 route avoids structures and landmarks while allowing access gaps
+ok 3 - FM-002 route avoids structures and landmarks while allowing access gaps
   ---
-  duration_ms: 1.400414
+  duration_ms: 1.416795
   ...
 # Subtest: FM-002 construction cannot occupy the camp or an active round-trip route
-ok 3 - FM-002 construction cannot occupy the camp or an active round-trip route
+ok 4 - FM-002 construction cannot occupy the camp or an active round-trip route
   ---
-  duration_ms: 4.553556
+  duration_ms: 7.869867
   ...
 # Subtest: FM-002 a new obstacle is rerouted around before any illegal step
-ok 4 - FM-002 a new obstacle is rerouted around before any illegal step
+ok 5 - FM-002 a new obstacle is rerouted around before any illegal step
   ---
-  duration_ms: 7.588736
+  duration_ms: 9.179535
   ...
 # Subtest: FM-002 completely blocked routes stop without consuming or teleporting
-ok 5 - FM-002 completely blocked routes stop without consuming or teleporting
+ok 6 - FM-002 completely blocked routes stop without consuming or teleporting
   ---
-  duration_ms: 0.927385
+  duration_ms: 0.923339
   ...
 # Subtest: V03 actual decision context isolates personal knowledge and omits global maps
-ok 6 - V03 actual decision context isolates personal knowledge and omits global maps
+ok 7 - V03 actual decision context isolates personal knowledge and omits global maps
   ---
-  duration_ms: 5.576454
+  duration_ms: 7.756518
   ...
 # Subtest: V05 staying is an accepted autonomous outcome with a persisted reason
-ok 7 - V05 staying is an accepted autonomous outcome with a persisted reason
+ok 8 - V05 staying is an accepted autonomous outcome with a persisted reason
   ---
-  duration_ms: 21.783606
+  duration_ms: 21.890991
   ...
 # Subtest: V05 scouting is gradual, returns without another model call, and survives restart
-ok 8 - V05 scouting is gradual, returns without another model call, and survives restart
+ok 9 - V05 scouting is gradual, returns without another model call, and survives restart
   ---
-  duration_ms: 22.240952
+  duration_ms: 30.401032
   ...
 # Subtest: unknown destinations, invalid contracts and extra provider fields are rejected
-ok 9 - unknown destinations, invalid contracts and extra provider fields are rejected
+ok 10 - unknown destinations, invalid contracts and extra provider fields are rejected
   ---
-  duration_ms: 13.794898
+  duration_ms: 22.160359
   ...
 # Subtest: replayed and stale decision responses never consume resources twice
-ok 10 - replayed and stale decision responses never consume resources twice
+ok 11 - replayed and stale decision responses never consume resources twice
   ---
-  duration_ms: 12.500162
+  duration_ms: 14.387716
   ...
 # Subtest: camp reserve and daily model limits fail safely
-ok 11 - camp reserve and daily model limits fail safely
+ok 12 - camp reserve and daily model limits fail safely
   ---
-  duration_ms: 8.145914
+  duration_ms: 1.631792
   ...
 # Subtest: timeouts recover without leaving a pending model request or forced expedition
-ok 12 - timeouts recover without leaving a pending model request or forced expedition
+ok 13 - timeouts recover without leaving a pending model request or forced expedition
   ---
-  duration_ms: 3.941978
+  duration_ms: 17.703008
   ...
 # Subtest: provider exploration call uses private prompt and parses only typed decisions
-ok 13 - provider exploration call uses private prompt and parses only typed decisions
+ok 14 - provider exploration call uses private prompt and parses only typed decisions
   ---
-  duration_ms: 13.346727
+  duration_ms: 7.08561
   ...
 # Subtest: world service persists private model requests outside its lease and applies once
-ok 14 - world service persists private model requests outside its lease and applies once
+ok 15 - world service persists private model requests outside its lease and applies once
   ---
-  duration_ms: 24.708985
+  duration_ms: 31.370007
   ...
 # Subtest: disabled exploration and maintenance do not call the decision provider
-ok 15 - disabled exploration and maintenance do not call the decision provider
+ok 16 - disabled exploration and maintenance do not call the decision provider
   ---
-  duration_ms: 5.406907
+  duration_ms: 2.870572
   ...
 # Subtest: relocated camp still supplies shelter, rations and construction labor
-ok 16 - relocated camp still supplies shelter, rations and construction labor
+ok 17 - relocated camp still supplies shelter, rations and construction labor
   ---
-  duration_ms: 0.711397
+  duration_ms: 0.631248
   ...
 # Subtest: V02 scouting coast and returning fits existing stock without resource creation
-ok 17 - V02 scouting coast and returning fits existing stock without resource creation
+ok 18 - V02 scouting coast and returning fits existing stock without resource creation
   ---
-  duration_ms: 70.756534
+  duration_ms: 108.83903
   ...
 # Subtest: V03 observations are individual snapshots and cannot mutate world state
-ok 18 - V03 observations are individual snapshots and cannot mutate world state
+ok 19 - V03 observations are individual snapshots and cannot mutate world state
   ---
-  duration_ms: 1.20118
+  duration_ms: 1.115616
   ...
 # Subtest: V04 journey advances gradually and repeated minute is idempotent
-ok 19 - V04 journey advances gradually and repeated minute is idempotent
+ok 20 - V04 journey advances gradually and repeated minute is idempotent
   ---
-  duration_ms: 8.294514
+  duration_ms: 11.271973
   ...
 # Subtest: invalid, overweight, water-crossing and replayed actions do not mutate state
-ok 20 - invalid, overweight, water-crossing and replayed actions do not mutate state
+ok 21 - invalid, overweight, water-crossing and replayed actions do not mutate state
   ---
-  duration_ms: 1.614864
+  duration_ms: 1.68485
   ...
 # Subtest: V09 cancellation keeps position and carried inventory; return takes time
-ok 21 - V09 cancellation keeps position and carried inventory; return takes time
+ok 22 - V09 cancellation keeps position and carried inventory; return takes time
   ---
-  duration_ms: 4.182246
+  duration_ms: 3.955072
   ...
 # Subtest: away inhabitants consume their pack, not distant communal stores
-ok 22 - away inhabitants consume their pack, not distant communal stores
+ok 23 - away inhabitants consume their pack, not distant communal stores
   ---
-  duration_ms: 2.210912
+  duration_ms: 7.669309
   ...
 # Subtest: V09 mid-journey storage restart matches uninterrupted simulation across midnight
-ok 23 - V09 mid-journey storage restart matches uninterrupted simulation across midnight
+ok 24 - V09 mid-journey storage restart matches uninterrupted simulation across midnight
   ---
-  duration_ms: 10.955347
+  duration_ms: 14.741142
   ...
 # Subtest: legacy import refuses to silently drop journeys and carried resources
-ok 24 - legacy import refuses to silently drop journeys and carried resources
+ok 25 - legacy import refuses to silently drop journeys and carried resources
   ---
-  duration_ms: 0.672742
+  duration_ms: 0.722255
   ...
 # Subtest: feature off preserves legacy object and bytes
-ok 25 - feature off preserves legacy object and bytes
+ok 26 - feature off preserves legacy object and bytes
   ---
-  duration_ms: 1.339269
+  duration_ms: 1.396052
   ...
 # Subtest: migration is additive, immutable, idempotent and round-trips
-ok 26 - migration is additive, immutable, idempotent and round-trips
+ok 27 - migration is additive, immutable, idempotent and round-trips
   ---
-  duration_ms: 3.352476
+  duration_ms: 11.852441
   ...
 # Subtest: unknown geography version fails closed
-ok 27 - unknown geography version fails closed
+ok 28 - unknown geography version fails closed
   ---
-  duration_ms: 0.389083
+  duration_ms: 0.421702
   ...
 # Subtest: authored terrain is repeatable and all original tiles remain mainland
-ok 28 - authored terrain is repeatable and all original tiles remain mainland
+ok 29 - authored terrain is repeatable and all original tiles remain mainland
   ---
-  duration_ms: 1.358226
+  duration_ms: 3.539825
   ...
 # Subtest: V01 mainland has no universally dominant region
-ok 29 - V01 mainland has no universally dominant region
+ok 30 - V01 mainland has no universally dominant region
   ---
-  duration_ms: 0.29845
+  duration_ms: 1.718066
   ...
 # Subtest: mainland walking routes are cardinal and cannot cross sea
-ok 30 - mainland walking routes are cardinal and cannot cross sea
+ok 31 - mainland walking routes are cardinal and cannot cross sea
   ---
-  duration_ms: 17.518665
+  duration_ms: 7.21404
   ...
 # Subtest: V16/V17 geometry: all islands connected and outer land cannot be seen from mainland
-ok 31 - V16/V17 geometry: all islands connected and outer land cannot be seen from mainland
+ok 32 - V16/V17 geometry: all islands connected and outer land cannot be seen from mainland
   ---
-  duration_ms: 169.390862
+  duration_ms: 200.783249
   ...
 # Subtest: island graph rejects invalid lookouts and disconnected terrain
-ok 32 - island graph rejects invalid lookouts and disconnected terrain
+ok 33 - island graph rejects invalid lookouts and disconnected terrain
   ---
-  duration_ms: 195.061734
+  duration_ms: 158.024117
   ...
 # Subtest: islands remain unavailable before marine release; sightings contain no resources
-ok 33 - islands remain unavailable before marine release; sightings contain no resources
+ok 34 - islands remain unavailable before marine release; sightings contain no resources
   ---
-  duration_ms: 0.404677
+  duration_ms: 0.404509
   ...
 # Subtest: V19 clear conditions recur within six simulated hours
-ok 34 - V19 clear conditions recur within six simulated hours
+ok 35 - V19 clear conditions recur within six simulated hours
   ---
-  duration_ms: 2.247072
+  duration_ms: 2.594498
   ...
 # Subtest: legacy proposal snapshot does not leak reserved geography
-ok 35 - legacy proposal snapshot does not leak reserved geography
+ok 36 - legacy proposal snapshot does not leak reserved geography
   ---
-  duration_ms: 2.495109
+  duration_ms: 4.260099
   ...
 # Subtest: baseline: ten daily water rations and 45 daily food rations, unchanged by migration
-ok 36 - baseline: ten daily water rations and 45 daily food rations, unchanged by migration
+ok 37 - baseline: ten daily water rations and 45 daily food rations, unchanged by migration
   ---
-  duration_ms: 2.333434
+  duration_ms: 2.369042
   ...
 # Subtest: baseline: repeating advance time does not apply simulation twice
-ok 37 - baseline: repeating advance time does not apply simulation twice
+ok 38 - baseline: repeating advance time does not apply simulation twice
   ---
-  duration_ms: 1.564832
+  duration_ms: 0.619746
   ...
 # Subtest: world service persists extension and reloads without changing resources
-ok 38 - world service persists extension and reloads without changing resources
+ok 39 - world service persists extension and reloads without changing resources
   ---
-  duration_ms: 18.386102
+  duration_ms: 7.468072
   ...
 # Subtest: default world service remains legacy
-ok 39 - default world service remains legacy
+ok 40 - default world service remains legacy
   ---
-  duration_ms: 3.31128
+  duration_ms: 0.398334
   ...
 # Subtest: baseline sandbox blocks host access and returns bounded effects
-ok 40 - baseline sandbox blocks host access and returns bounded effects
+ok 41 - baseline sandbox blocks host access and returns bounded effects
   ---
-  duration_ms: 44.629485
+  duration_ms: 69.736953
   ...
 # Subtest: real Redis persistence gate
     # Subtest: valid commit writes all records and releases only its own lease
     ok 1 - valid commit writes all records and releases only its own lease
       ---
-      duration_ms: 112.481471
+      duration_ms: 148.096452
       ...
     # Subtest: expired worker cannot write after a successor takes the lease
     ok 2 - expired worker cannot write after a successor takes the lease
       ---
-      duration_ms: 87.865788
+      duration_ms: 109.709207
       ...
     # Subtest: wrong hash type rejects before any write
     ok 3 - wrong hash type rejects before any write
       ---
-      duration_ms: 68.042638
+      duration_ms: 72.504836
       ...
     # Subtest: malformed serialized input rejects before any write
     ok 4 - malformed serialized input rejects before any write
       ---
-      duration_ms: 27.811782
+      duration_ms: 31.13371
       ...
     # Subtest: world service initializes and reloads through actual Redis scripts
     ok 5 - world service initializes and reloads through actual Redis scripts
       ---
-      duration_ms: 111.001089
+      duration_ms: 120.650126
       ...
     # Subtest: migration backup is atomic, restorable and never overwritten
     ok 6 - migration backup is atomic, restorable and never overwritten
       ---
-      duration_ms: 474.747382
+      duration_ms: 390.630625
       ...
     1..6
-ok 41 - real Redis persistence gate
+ok 42 - real Redis persistence gate
   ---
-  duration_ms: 1040.878386
+  duration_ms: 943.419512
   ...
 # Subtest: expired worker cannot commit or release a successor lease
-ok 42 - expired worker cannot commit or release a successor lease
+ok 43 - expired worker cannot commit or release a successor lease
   ---
-  duration_ms: 1.447333
+  duration_ms: 1.464223
   ...
 # Subtest: lost lease produces no partial initial world or history
-ok 43 - lost lease produces no partial initial world or history
+ok 44 - lost lease produces no partial initial world or history
   ---
-  duration_ms: 1.656135
+  duration_ms: 1.695642
   ...
 # Subtest: concurrent ticks advance one persisted world exactly once
-ok 44 - concurrent ticks advance one persisted world exactly once
+ok 45 - concurrent ticks advance one persisted world exactly once
   ---
-  duration_ms: 0.642253
+  duration_ms: 6.408432
   ...
 # Subtest: Redis adapter passes commit and token release as atomic scripts
-ok 45 - Redis adapter passes commit and token release as atomic scripts
+ok 46 - Redis adapter passes commit and token release as atomic scripts
   ---
-  duration_ms: 0.770631
+  duration_ms: 2.223962
   ...
 # Subtest: isolated preview never starts or calls an AI plan
-ok 46 - isolated preview never starts or calls an AI plan
+ok 47 - isolated preview never starts or calls an AI plan
   ---
-  duration_ms: 35.277862
+  duration_ms: 26.339217
   ...
 # Subtest: FM-006 repeated or late proposal responses cannot apply twice
-ok 47 - FM-006 repeated or late proposal responses cannot apply twice
+ok 48 - FM-006 repeated or late proposal responses cannot apply twice
   ---
-  duration_ms: 0.432826
+  duration_ms: 0.420937
   ...
 # Subtest: FM-007 enabling planning clears a persisted pause
-ok 48 - FM-007 enabling planning clears a persisted pause
+ok 49 - FM-007 enabling planning clears a persisted pause
   ---
-  duration_ms: 4.421192
+  duration_ms: 0.91281
   ...
-1..48
-# tests 54
+1..49
+# tests 55
 # suites 0
-# pass 54
+# pass 55
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 3004.20622
+# duration_ms 3286.993582
