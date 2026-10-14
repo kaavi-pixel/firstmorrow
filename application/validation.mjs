@@ -1,5 +1,6 @@
 import { normalizeArt } from './public/core.js';
 import {validatePhysical,minimumMaterialKg} from './public/physics.js';
+import { validateDecision } from './lib/decisions.mjs';
 export const PROVIDERS = Object.freeze({
   openai: { name: 'OpenAI', endpoint: 'https://api.openai.com/v1/responses', model: 'gpt-6-astra' },
   xai: { name: 'xAI / Grok', endpoint: 'https://api.x.ai/v1/responses', model: 'grok-4.7' },
@@ -57,16 +58,25 @@ Direct resource changes are FORBIDDEN. Protected physics decides actual outcomes
 Modules run every day. No network, DOM, timers, imports or filesystem. Return synchronously within500ms. Avoid loops. Example pump code: "return {actions:{pumpLiters:Math.max(0,2000-world.resources.water)},needs:[]};"
 The ecology, autonomy, and social outcomes are a toy model, not empirical evidence. Be specific and modest. Never include credentials or requests for secrets.`;
 
-export async function callProvider({ provider, key, model, input, test = false }, fetcher = fetch, signal) {
+const EXPLORATION_SYSTEM = `You are one inhabitant in Firstmorrow, not the settlement architect.
+Decide using only the supplied personal observations, needs, values and carried supplies.
+Return only a JSON object with action ("stay", "scout", or "return") and reason (1-400 characters).
+For scout only, include destination: {x: integer, y: integer}, copied from scoutDestinations.
+Choose only an offered action. Staying is a legitimate choice; do not explore just because you can.
+Scouting is a short round trip with an automatic physical return, not relocation or resource gathering.
+Regional ratings are observations, not available stocks. No tools, code, buildings, or extra fields.
+Your reason should explain the tradeoff in the first person without pretending to know unseen terrain.`;
+
+export async function callProvider({ provider, key, model, input, test = false, purpose = 'build' }, fetcher = fetch, signal) {
   const p = PROVIDERS[provider];
   if (!p) throw new Error('Unsupported provider.');
   if (typeof key !== 'string' || key.length < 8 || key.length > 512 || /[\r\n]/.test(key)) throw new Error('Enter a valid API key in Connections.');
   if (typeof model !== 'string' || !/^[a-zA-Z0-9/_.:-]{1,140}$/.test(model)) throw new Error('Enter a valid model ID.');
   const body = {
     model, input: [
-      { role: 'system', content: test ? 'Reply with only OK.' : SYSTEM },
+      { role: 'system', content: test ? 'Reply with only OK.' : purpose==='explore'?EXPLORATION_SYSTEM:SYSTEM },
       { role: 'user', content: test ? 'Connection test. Reply OK.' : JSON.stringify(input) }
-    ], max_output_tokens: test ? 2048 : 16000, store: false
+    ], max_output_tokens: test ? 2048 : purpose==='explore'?2048:16000, store: false
   };
   // Reasoning models can spend the whole output budget thinking; keep effort low.
   if (provider === 'openai' && /^(gpt-[5-9]|o[1-9])/.test(model)) body.reasoning = { effort: 'low' };
@@ -90,7 +100,10 @@ export async function callProvider({ provider, key, model, input, test = false }
     .filter(o => o.type === 'message').flatMap(o => o.content || [])
     .filter(c => c.type === 'output_text').map(c => c.text).join('\n');
   if (!output) throw new Error('The model returned no text. Its reasoning may have used the output budget; try another model.');
-  return { ...(test ? { connected: true } : { artifact: extractArtifact(output) }),
+  const parsed = test ? { connected: true } : purpose==='explore'
+    ? {decision:validateDecision(JSON.parse(output.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'')))}
+    : {artifact:extractArtifact(output)};
+  return { ...parsed,
     usage: { input: data.usage?.input_tokens || 0, output: data.usage?.output_tokens || 0 },
     model: data.model || model };
 }

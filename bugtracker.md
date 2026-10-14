@@ -15,7 +15,7 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 | ID | Severity | Status | Summary | Release impact |
 |---|---|---|---|---|
 | FM-001 | critical | released | Expired simulation worker could commit after its lock lease, with separate state/history writes | Real Redis tests passed; production world advancement and reload verified |
-| FM-002 | high | open | Land routing does not yet respect fine structure and landmark obstacles | Keep autonomous travel disabled |
+| FM-002 | high | fixed_local | Land routing ignored structure and landmark obstacles | Shared occupancy, safe camp anchor, route revalidation and construction reservations tested; rollout pending |
 | FM-003 | high | released | Legacy import would discard carried stores and exploration state | Expanded saves are explicitly rejected; no production save was imported |
 | FM-004 | medium | fixed_local | Enlarged mainland did not fit the initial mobile viewport | Verify production only if geography is enabled |
 | FM-005 | medium | released | Browser storage rejection could interrupt welcome/refresh behavior in isolated previews | Preview and live viewer checks passed; guarded storage accesses deployed |
@@ -34,10 +34,10 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 ### FM-002: Fine obstacle routing
 
 - **Reproduction:** Plan a same-landmass route across an occupied building or a legacy blocked landmark tile.
-- **Current behavior:** Routing checks land versus sea and map bounds, but not fine collision with existing structures/landmarks.
-- **Required fix:** Unify movement obstacles with authoritative terrain and structure geometry; validate the next step when the world changes during a journey.
-- **Modules:** `application/public/geography.js`, `application/public/exploration.js`, `application/public/core.js`.
-- **Mitigation:** Travel remains an internal tested engine, not exposed to model decisions or visitor commands.
+- **Fix:** Cardinal routes use shared landmark/building occupancy. Revalidate remaining steps each minute and reroute or stop safely. Construction reserves camp, occupied tiles and active walking corridors.
+- **Migration:** Choose the nearest free camp tile when a legacy building occupies the default anchor. No existing structure or stock moves.
+- **Modules:** `application/public/navigation.js`, `application/public/geography.js`, `application/public/exploration.js`, `application/public/core.js`.
+- **Evidence:** Dedicated regressions cover obstacles, access gaps, occupied anchors, route changes, blocked routes and construction reservations. A two-day clone of live state completes scouting/return while preserving resources and structure IDs.
 
 ### FM-003: Legacy import loses extension state
 
@@ -74,12 +74,12 @@ Keep IDs stable. Every fix should include reproduction steps, changed modules, r
 
 | Check | State | Notes |
 |---|---|---|
-| Local regression suite | pass | 37 tests pass, zero skipped; evidence in `application/tests/latest-results.tap` |
+| Local regression suite | pass | 54 tests pass, zero skipped; evidence in `application/tests/latest-results.tap` |
 | Real Redis script execution | pass | Isolated Unix-socket Redis; no production credentials or data used |
-| Production source drift | checked | Current production still matches recovered deployment `dpl_GcAhTs1xsnpZ47zPsyRL4P81fUkK` |
+| Production source drift | checked | Previous foundation release `dpl_8xz2QzLsjVE18aL28htn83goou7V`; latest receipt will be recorded after rollout |
 | GitHub source repository | pushed | Private `kaavi-pixel/firstmorrow`, default branch `main` |
 | Production release | ready | `dpl_8xz2QzLsjVE18aL28htn83goou7V`; source `335ac632f729dc64d4d49fb3a91d613472d9dcab`; `FM_GEOGRAPHY=0` |
-| Geography/travel/boat scope | incomplete | New AI actions, fine collision, migration, dynamic weather, and boats are unfinished features; do not advertise them as released |
+| Geography/travel/boat scope | staged | Autonomous short scouting is implemented; physical regional production, relocation, weather and boats remain unfinished |
 
 ## Fix and deployment history
 

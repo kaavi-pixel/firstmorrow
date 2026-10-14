@@ -14,6 +14,27 @@ for _, index in ipairs({4, 5}) do
     return redis.error_reply('World storage hash has an unexpected type')
   end
 end
+-- The backup and migration are one Redis operation. No writer can slip between
+-- them, so a separate maintenance/export window is not needed for this migration.
+-- Compute the entire bundle before the first write. Never overwrite a backup.
+local backup = nil
+if ARGV[6] == '1' then
+  for _, index in ipairs({2, 3}) do
+    local kind = redis.call('TYPE', KEYS[index]).ok
+    if kind ~= 'none' and kind ~= 'string' then
+      return redis.error_reply('World storage string has an unexpected type')
+    end
+  end
+  if redis.call('EXISTS', KEYS[2]) == 1 then
+    if redis.call('EXISTS', KEYS[6]) == 1 then
+      return redis.error_reply('Migration backup already exists; operator review required')
+    end
+    backup = cjson.encode({version=1,core=redis.call('GET',KEYS[2]),
+      live=redis.call('GET',KEYS[3]),statics=redis.call('HGETALL',KEYS[4]),
+      days=redis.call('HGETALL',KEYS[5])})
+  end
+end
+if backup then redis.call('SET', KEYS[6], backup) end
 for id, value in pairs(statics) do redis.call('HSET', KEYS[4], id, value) end
 for id, value in pairs(days) do redis.call('HSET', KEYS[5], id, value) end
 redis.call('SET', KEYS[2], ARGV[2])
@@ -35,7 +56,7 @@ export function redisKv(redis) {
     hgetall: k => redis.hgetall(k),
     release: async (k, token) => Number(await redis.eval(RELEASE_SCRIPT, [k], [token])) === 1,
     commit: async (token, values) => Number(await redis.eval(COMMIT_SCRIPT,
-      [K.lock, K.core, K.live, K.statics, K.days],
-      [token, values.core, values.live, JSON.stringify(values.statics), JSON.stringify(values.days)])) === 1
+      [K.lock, K.core, K.live, K.statics, K.days, K.backup],
+      [token, values.core, values.live, JSON.stringify(values.statics), JSON.stringify(values.days), values.backup ? '1' : '0'])) === 1
   };
 }

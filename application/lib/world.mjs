@@ -6,8 +6,9 @@ import { freshState, advance, needsProposal, markRequested, proposalInput, apply
 import { runBehavior } from './runner.mjs';
 import { migrateGeography } from '../public/geography.js';
 import { observe } from '../public/exploration.js';
+import { requestDecision, finishDecision } from './decisions.mjs';
 
-export const WORLD_KEYS = Object.freeze({ core: 'fm:core', live: 'fm:live', statics: 'fm:b', days: 'fm:days', lock: 'fm:lock' });
+export const WORLD_KEYS = Object.freeze({ core: 'fm:core', live: 'fm:live', statics: 'fm:b', days: 'fm:days', lock: 'fm:lock', backup: 'fm:backup:pre-exploration-v1' });
 const K = WORLD_KEYS;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const asObject = v => Array.isArray(v) ? Object.fromEntries(v.reduce((a, x, i) => (i % 2 ? a[a.length - 1].push(x) : a.push([x]), a), [])) : (v || {});
@@ -28,8 +29,14 @@ export function memoryKv(clock = Date.now) {
       if (!alive(k) || m.get(k) !== token) return false;
       m.delete(k); exp.delete(k); return true;
     },
-    async commit(token, { core, live, statics, days }) {
+    async commit(token, { core, live, statics, days, backup = false }) {
       if (!alive(K.lock) || m.get(K.lock) !== token) return false;
+      if(backup && m.has(K.core)){
+        if(m.has(K.backup))throw new Error('Migration backup already exists; operator review required.');
+        m.set(K.backup,JSON.stringify({version:1,core:m.get(K.core),live:m.get(K.live)||null,
+          statics:Object.entries(Object.fromEntries(h.get(K.statics)||[])).flat(),
+          days:Object.entries(Object.fromEntries(h.get(K.days)||[])).flat()}));
+      }
       // No await: the in-memory adapter applies one indivisible mutation.
       for (const [key, values] of [[K.statics, statics], [K.days, days]]) {
         const target = h.get(key) || new Map();
@@ -41,7 +48,7 @@ export function memoryKv(clock = Date.now) {
   };
 }
 
-export function createWorldService({ kv, propose, run = runBehavior, clock = Date.now, budgetMs = 20000, geographyEnabled = false, planningEnabled = true }) {
+export function createWorldService({ kv, propose, decide = null, explorationEnabled = false, maintenance = false, run = runBehavior, clock = Date.now, budgetMs = 20000, geographyEnabled = false, planningEnabled = true }) {
   if (typeof kv.commit !== 'function' || typeof kv.release !== 'function')
     throw new Error('World storage requires atomic commit and lock release.');
   let cache = { count: -1, byId: {} };
@@ -57,9 +64,12 @@ export function createWorldService({ kv, propose, run = runBehavior, clock = Dat
     return state;
   }
   async function save(S, snapshots, now, token) {
+    const backup = !!S.world.extensionMigration && !S.world.extensionMigration.backupCaptured;
+    if(backup) S.world.extensionMigration.backupCaptured = true;
     const { core, statics } = splitState(S);
     const fresh = statics.filter(s => !cache.byId[s.id]);
     const committed = await kv.commit(token, {
+      backup,
       statics: Object.fromEntries(fresh.map(s => [s.id, JSON.stringify(s)])),
       days: Object.fromEntries(snapshots.map(d => [String(d.day), JSON.stringify(d)])),
       core: JSON.stringify(core), live: JSON.stringify(livePayload(S, now))
@@ -76,6 +86,7 @@ export function createWorldService({ kv, propose, run = runBehavior, clock = Dat
   }
   // Advance to now, store, and if the AI is due to think, ask it outside the lock.
   async function tick() {
+    if(maintenance)return {paused:true};
     let request = null;
     const out = await withLock(async token => {
       const now = clock();
@@ -87,16 +98,22 @@ export function createWorldService({ kv, propose, run = runBehavior, clock = Dat
       if (S.world.exploration) for (const p of S.world.inhabitants) observe(S.world, p.id);
       const snaps = await advance(S, now, run, budgetMs);
       if (propose && needsProposal(S, now)) { markRequested(S, now); request = { planId: S.plan.id, input: proposalInput(S) }; }
+      if (!request && planningEnabled && explorationEnabled && decide) {
+        const travel = requestDecision(S, now);
+        if (travel) request = { decisionId: travel.id, input: travel.input };
+      }
+      S.world.exploration && (S.world.exploration.autonomous = explorationEnabled && !!decide && planningEnabled);
       await save(S, snaps, now, token);
       return { day: S.world.day + 1, minute: S.world.minute, behindMs: now - S.simAt, days: snaps.length, proposing: !!request };
     });
     if (out.busy || !request) return out;
     let result = null, error = null;
-    try { result = await propose(request.input); } catch (e) { error = String(e?.message || 'Proposal failed.'); }
+    try { result = await (request.decisionId ? decide : propose)(request.input); } catch (e) { error = String(e?.message || 'Proposal failed.'); }
     for (let i = 0; i < 40; i++) {
       const r = await withLock(async token => {
         const now = clock(), S = await load(), snaps = await advance(S, now, run, budgetMs);
-        const applied = error ? failPlan(S, error, request.planId) : applyProposal(S, request.planId, result);
+        const applied = request.decisionId ? finishDecision(S, request.decisionId, result, error)
+          : error ? failPlan(S, error, request.planId) : applyProposal(S, request.planId, result);
         await save(S, snaps, now, token); return { applied };
       });
       if (!r.busy) { out.applied = r.applied; out.error = error || undefined; break; }

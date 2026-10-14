@@ -3,6 +3,7 @@
 import {clone,wellbeing,meanWellbeing,NEEDS,workMinute,activityFor,currentProject,clockLabel,workDaysLeft,WORK} from './core.js';
 import {paintSprite,paintPerson,paintAgent,createWorldRenderer} from './art.js';
 import {SCIENCE,conservationErrors} from './physics.js';
+import {advanceJourneys} from './exploration.js';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -26,7 +27,7 @@ async function refresh(){
     skew=d.serverNow-Date.now();live=d;fetchedAt=Date.now();
     if(d.preview){
       document.querySelector('.welcome-card h1').textContent='Regional terrain preview';
-      document.querySelector('.welcome-card p').textContent='An isolated development world. Explore the map view; autonomous travel and boats are not enabled yet.';
+      document.querySelector('.welcome-card p').textContent='An isolated development world with no model calls. The live world runs separately; boats remain disabled.';
       $('preview-note').hidden=false;
     }
     base={...clone(d.world),buildings:merge(d.world.buildings)};
@@ -43,7 +44,7 @@ function localAdvance(){
   if(!base)return;
   const now=Date.now()+skew,minutes=Math.max(0,Math.min(MAX_LOCAL_MIN,Math.floor((now-live.simAt)/1000)));
   const w=clone(base);
-  for(let i=0;i<minutes;i++){w.minute++;if(w.minute>=1440){w.minute=0;w.day++;}if(currentProject(w))workMinute(w);}
+  for(let i=0;i<minutes;i++){w.minute++;if(w.minute>=1440){w.minute=0;w.day++;}advanceJourneys(w);if(currentProject(w))workMinute(w);}
   world=w;if(viewDay===null)view=world;
 }
 setInterval(()=>{if(base){localAdvance();update();}},1000);
@@ -168,9 +169,13 @@ function renderCard(soft=false){
     if(card.dataset.html!==html){card.innerHTML=html;card.dataset.html=html;paintPeople(card);}
   }else if(t.type==='person'){
     const i=view.inhabitants.findIndex(p=>p.id===t.id),p=view.inhabitants[i];if(!p)return closeCard();
+    const exploration=view.exploration,decision=exploration?.decisions?.[p.id],pack=exploration?.packs?.[p.id],
+      known=Object.keys(exploration?.knowledge?.[p.id]?.tiles||{}).length;
     const html=`<div class="card-head"><canvas class="person" data-sprite-person="${p.id}"></canvas><div><h2>${p.name}</h2><p>${esc(activityFor(view,i).label)}</p></div><button class="x" data-close="card" aria-label="Close">×</button></div>
       <p class="quote">“${esc(p.wish)}”</p><div class="tags">${p.values.map(v=>`<span class="tag">${esc(v)}</span>`).join('')}</div>
-      ${NEEDS.map(k=>`<div class="need"><span>${k[0].toUpperCase()+k.slice(1)}</span><span class="bar"><i style="width:${p.needs[k]}%"></i></span><span>${Math.round(p.needs[k])}</span></div>`).join('')}`;
+      ${NEEDS.map(k=>`<div class="need"><span>${k[0].toUpperCase()+k.slice(1)}</span><span class="bar"><i style="width:${p.needs[k]}%"></i></span><span>${Math.round(p.needs[k])}</span></div>`).join('')}
+      ${exploration?`<dl class="facts"><div><dt>Observed</dt><dd>${known} tiles</dd></div><div><dt>Carrying</dt><dd>${fmt(pack?.water||0,1)} L · ${fmt(pack?.food||0)} kcal</dd></div></dl>`:''}
+      ${decision?`<details open><summary>Last decision · ${esc(decision.outcome)}</summary><p>${esc(decision.reason||'No new decision.')}</p><p class="muted">${esc(decision.detail)}</p></details>`:''}`;
     if(card.dataset.html!==html){card.innerHTML=html;card.dataset.html=html;paintPeople(card);}
   }else{
     const b=view.buildings.find(b=>b.id===t.id);if(!b)return closeCard();
@@ -214,7 +219,9 @@ document.documentElement.dataset.theme=matchMedia('(prefers-color-scheme: light)
 window.render_game_to_text=()=>view&&JSON.stringify({live:viewDay===null,viewDay,day:view.day,clock:clockLabel(view),plan,
   preview:!!live?.preview,geographyVersion:view.geography?.version??null,islandsEnabled:view.geography?.islandsEnabled??false,
   resources:view.resources,balances:conservationErrors(view),wellbeing:meanWellbeing(view),
-  inhabitants:view.inhabitants.map((p,i)=>({id:p.id,name:p.name,activity:activityFor(view,i).kind})),
+  inhabitants:view.inhabitants.map((p,i)=>({id:p.id,name:p.name,activity:activityFor(view,i).kind,
+    position:view.exploration?.positions[p.id],journey:view.exploration?.journeys[p.id]?.status,
+    decision:view.exploration?.decisions?.[p.id]?.outcome})),
   agents:agents.map(a=>({name:a.name,model:a.model,status:a.status,say:a.say})),
   buildings:view.buildings.map(b=>({id:b.id,name:b.name,x:b.x,y:b.y,built:b.built!==false,progress:+(b.progressHours/b.laborHours).toFixed(3)})),last:view.history.at(-1)?.text});
 window.advanceTime=ms=>renderer.advance(ms);

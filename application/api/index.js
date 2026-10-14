@@ -12,6 +12,9 @@ const redis = new Redis({ url: process.env.KV_REST_API_URL, token: process.env.K
 const kv = redisKv(redis);
 const service = createWorldService({
   kv, propose: createProposer(process.env.PPLX_API_KEY),
+  decide: createProposer(process.env.PPLX_API_KEY, fetch, 'explore'),
+  explorationEnabled: process.env.FM_EXPLORATION === '1',
+  maintenance: process.env.FM_MAINTENANCE === '1',
   geographyEnabled: process.env.FM_GEOGRAPHY === '1'
 });
 const receiver = new Receiver({ currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY || '', nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY || '' });

@@ -70,7 +70,7 @@ export function physicalDay(world,requests){
     r.energy-=extracted*SCIENCE.materialExtractionKWhPerKg;b.energyUsedKWh+=extracted*SCIENCE.materialExtractionKWhPerKg;
   }
   // Domestic water is reserved first; contending crops share requested irrigation proportionally.
-  const present=world.inhabitants.filter(p=>!world.exploration||atCamp(world.exploration.positions[p.id]));
+  const present=world.inhabitants.filter(p=>!world.exploration||atCamp(world.exploration.positions[p.id],world));
   const domestic=present.length*SCIENCE.waterPerPersonL;
   const desired=pairs.map(({effect,building})=>Math.min(effect.actions.irrigateLiters,building.physical.cropAreaM2*referenceETmm()*SCIENCE.cropCoefficient));
   const irrigationBudget=Math.max(0,r.water-domestic),total=desired.reduce((s,n)=>s+n,0);

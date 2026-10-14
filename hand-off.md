@@ -1,6 +1,6 @@
 # Firstmorrow: Land Extension Hand-off
 
-Updated: 2026-10-14. Current work: M0 release-safety decisions, M1 terrain foundations, and M2 internal travel.
+Updated: 2026-10-14. Current work: obstacle-aware M2 travel and M3 autonomous scouting pilot release.
 
 This is the live progress record for the land-extension work. Scope, task definitions, dependencies, and acceptance scenarios live in `implementation-plan.md`; this document records what has actually been done and what the next implementer should do.
 
@@ -9,11 +9,11 @@ This is the live progress record for the land-extension work. Scope, task defini
 - **Approved direction:** Kavi accepted all recommendations from the land-extension review: competing regional advantages, need-driven exploration, physical relocation, practical reasons to stay, survivable starting conditions, and causal environmental changes.
 - **Planning complete:** The implementation plan and this progress tracker have been created. The original feature proposal remains unchanged.
 - **Island direction added:** Plan a large Tasmania-inspired island and smaller boat-accessible islands. Some must be visible from the mainland, others only from neighboring islands; every island must have a mainland-rooted physical discovery path.
-- **Implementation evidence:** Source inspected and recovered into `application/`. The suite now has 37 passing tests covering geography, additive migration, travel, knowledge isolation, resource accounting, interruption, lock ownership, real Redis execution, and sandbox baseline behavior.
+- **Implementation evidence:** 54 tests pass with no skips, including obstacle rerouting, safe camp migration, private provider context, typed decisions, stale/replayed responses, round-trip return, real Redis backup/restore and all previous regressions.
 - **Available project files:** Planning documents plus the recovered and modified application source, package lock, tests, development notes, and recovery procedure. Dependencies and environment files are excluded from persistence.
 - **Verified architecture:** Vercel entry point, Redis storage, QStash scheduler, QuickJS sandbox, plain JavaScript/Canvas frontend, one AI structure builder, and five modeled inhabitants. Existing characters had visual activity but no durable travel before this increment.
-- **Working locally:** Feature-gated regional terrain, carried supplies, internal land-journey actions, timestamped individual observations, and atomic persistence adapter. The preview makes no model calls and uses only an isolated in-memory world.
-- **Not implemented:** AI travel decisions, fine obstacle collision, regional resource production, relocation/salvage, dynamic environmental effects, and actual boats. Island geometry and sighting validation are foundations only.
+- **Implemented:** Shared movement obstacles, safe camp anchor, timestamped individual observations, typed autonomous stay/scout/return decisions, conserved supplies, automatic physical return and decision cards. The private preview makes no model calls and uses an isolated in-memory world.
+- **Not implemented:** Regional resource production, permanent relocation/salvage, dynamic environmental effects, and boats. Island geometry and sighting validation are foundations only.
 - **Release state:** Kavi requested publication after the planning/implementation increment. A conservative foundation release is now live; no world reset or geography migration was performed.
 - **Repository:** Private `https://github.com/kaavi-pixel/firstmorrow`, default branch `main`, contains the source and tracking documents. Vercel deployment is currently CLI-driven; automatic deployments from GitHub have not been configured.
 - **Release verification:** 37 tests pass with no skips, including actual local Redis scripts. Live health returned HTTP 200; existing structure `b0-go` remained; simulation time advanced and all resource conservation discrepancies were zero.
@@ -22,11 +22,11 @@ This is the live progress record for the land-extension work. Scope, task defini
 
 Continue in the existing `application/` source. Do not download the old app again, create a separate simulation, or replace the live world.
 
-1. Run `npm ci` and `npm test`; read `application/README.md` for the exact implemented boundaries.
-2. Finish LE-20A by unifying walking obstacles with the existing construction/terrain restrictions, including a safe camp origin when legacy buildings occupy its anchor.
-3. Finish LE-20D by enforcing `inhabitantView` at the new model-action boundary; then implement M3 without replacing the existing structure-generation contract.
-4. Real Redis Lua integration now passes locally, including expired leases and wrong key types. Verify hosted-provider behavior and continued world advancement during release.
-5. Resolve remaining visible-map and migration policy choices before production. Follow the explicit backup/restore and authorization gate in the application README.
+1. Run `npm ci` and `npm test` with `redis-server` installed; read `application/README.md` for exact pilot boundaries.
+2. Review natural-agent choices without forcing exploration. Current budget is 24 additional requests per real UTC day, one active scout and a 720-simulation-minute personal cooldown.
+3. Make regional resource differences physical, not just observed ratings, before permanent migration. Preserve total stocks and the existing builder contract.
+4. Continue M4 migration/salvage after establishing material/ownership accounting; weather and boats remain later milestones.
+5. Keep the pre-exploration Redis checkpoint private. Disabling exploration stops new requests but lets active journeys return; restoration must reconcile later progress, not silently erase it.
 
 Authoritative source baseline: Vercel deployment `dpl_GcAhTs1xsnpZ47zPsyRL4P81fUkK`, project `prj_SgYPXt92l6DGcoLanupudRiRsMuO`, team `firstmorrow`. The older Perplexity app identity is `5fde9033-a18b-4fe9-bc3d-94e0fe2b3abc`; its source download was unavailable, so the source was recovered through authenticated deployment-file reads instead.
 
@@ -38,8 +38,8 @@ Allowed status values: `not_started`, `in_progress`, `blocked`, `done`. Only use
 |---|---|---|---|
 | M0: Discovery | in_progress | LE-00A–LE-00D | A/B/D complete; remaining decisions and live recovery validation not approved |
 | M1: Terrain and start | in_progress | LE-10A–LE-10D | Code-level fixtures and V01/V02 pass; final visible scope/M0 gate outstanding |
-| M2: Travel and knowledge | in_progress | LE-20A–LE-20D | Internal journey/observation engine tested; obstacles and model boundary outstanding |
-| M3: Autonomous decisions | not_started | LE-30A–LE-30D | Depends on M2 |
+| M2: Travel and knowledge | done | LE-20A–LE-20D | Land routing, private model context, persistence, interruption and round-trip tests pass |
+| M3: Autonomous decisions | done | LE-30A–LE-30D | Controlled stay/scout fixtures pass; natural-agent rollout remains separately verified below |
 | M4: Migration and salvage | not_started | LE-40A–LE-40D | Depends on M3 and construction contract |
 | M5: Weather and observer UI | not_started | LE-50A–LE-50D | Depends on M1; observer integration needs M2–M4 |
 | M6: Core validation/release | not_started | LE-60A–LE-60D | Depends on M1–M5 |
@@ -53,8 +53,9 @@ Use the plan’s checkboxes as the complete task list. Add active-task rows here
 | Task | Status | Owner | Latest evidence | Next action |
 |---|---|---|---|---|
 | LE-00C | in_progress | Implementer / Kavi | D01 resolved; defaults recorded in README | Confirm remaining scope/recovery decisions before release |
-| LE-20A | in_progress | Implementer | Route, load, duration and consumption tests pass | Add fine obstacle validation |
-| LE-20D | in_progress | Implementer | Individual-view tests pass; legacy builder receives no geography | Enforce new model-action context boundary in M3 |
+| LE-20A | done | Implementer | Shared obstacles, changed-route tests, safe anchor and construction reservations pass | Monitor production |
+| LE-20D | done | Implementer | Provider-body regression verifies only private `decisionInput` is sent | Preserve boundary in later tools |
+| LE-30A–D | done | Implementer | Typed decisions, known destinations, recorded reasons and physical returns pass | Observe natural choices |
 
 ## Integration map
 
@@ -66,15 +67,15 @@ Replace `unverified` with actual module/file references and a short explanation 
 | World schema and migrations | `lib/sim.mjs`, `public/geography.js` | Core v1, world v3; additive geography v1, no reset |
 | Simulation cadence / tick | `lib/sim.mjs`: `advance`, `minute` | One real second per simulation minute; bounded catch-up |
 | Scheduler and retry handling | `api/index.js`, `lib/world.mjs` | QStash four-minute schedule; token-checked atomic commit added |
-| Inhabitant context builder | `worldSnapshot`, `proposalInput`; new `inhabitantView` | Existing structure builder unchanged; personal observation view not yet wired into model decisions |
+| Inhabitant context builder | `worldSnapshot`, `proposalInput`; `decisionInput`, `inhabitantView` | Builder unchanged; separate travel provider receives only personal observations and offered actions |
 | Action validator / sandbox | `validation.mjs`, `lib/runner.mjs`, `public/exploration.js` | QuickJS limits retained; new internal journey validator rejects replay/load/route errors |
 | Construction / physics | `public/core.js`, `public/physics.js` | Existing building model has capacities/costs, no mobility/salvage contract; carried stores now conserved |
-| Persistence / authoritative writer | `lib/world.mjs`, `lib/redis-kv.mjs` | `fm:core`, `fm:live`, `fm:b`, `fm:days`; staging Redis verification pending |
-| Terrain and navigation | `public/geography.js` | Fixed finite fixture; cardinal land routing; fine obstacles pending |
+| Persistence / authoritative writer | `lib/world.mjs`, `lib/redis-kv.mjs`, `lib/recovery.mjs` | Atomic Redis commit plus same-operation migration checkpoint; isolated restore test passes |
+| Terrain and navigation | `public/geography.js`, `public/navigation.js`, `public/exploration.js` | Cardinal routes, shared fine occupancy, known-route filter, safe anchor and construction reservations |
 | Coastal visibility / island generation | `validateIslandDiscovery`, `visibleIslands` | Rooted graph, lookout reachability, landmass occlusion; no marine feasibility validation yet |
 | Vessel construction / marine travel | Not implemented | Must add validated buoyancy/load/propulsion before enabling islands |
 | Renderer and timeline | `public/art.js`, `public/app.js`, `daySnapshot` | Existing Canvas appearance retained; historical exploration snapshots added |
-| Tests and fixtures | `tests/*.test.mjs` | `npm test`: 37 pass, no skips; desktop/mobile preview and production viewer checked |
+| Tests and fixtures | `tests/*.test.mjs`, `tests/live-clone-pilot.mjs` | 54 pass, no skips; two-day live-state clone pilot, 6 scouts, 4 stays, 170 restarts, zero balance errors |
 
 ## Decision log
 
@@ -87,12 +88,12 @@ The approved design direction is settled. New technical defaults in the plan are
 | Island discoverability | required | Every island has a physical sighting chain from reachable mainland lookouts; include both mainland-visible and island-only-visible islands |
 | Island rollout | planned | Reserve coastal compatibility during M1; enable islands and boats in M8 after core validation |
 | D01 | resolved | 2026-10-14: source recovered and runtime mapped; see integration table |
-| D02 | proposed | 40×38 mainland fixture preserves original 22×22; three reserved islands. Final visible scope not approved |
-| D03 | proposed | 8 m tiles; two minutes/tile; 20 kg carry cap; explicit extra food/water costs and one-day default supplies. Game assumptions in README |
+| D02 | pilot default | Authorized batch uses existing 40×38 fixture preserving original 22×22; reserved islands stay disabled; final coast artwork remains later work |
+| D03 | pilot default | 8 m tiles; two minutes/tile; 20 kg carry cap; one-day rations and explicit travel costs; maximum 40-tile outbound scout |
 | D04 | open | Establish construction and salvage accounting |
 | D05 | open | Confirm ownership/reuse rules; proposed safe default preserves ownership |
 | D06 | open | Define weather parameters, schedule, and supported effects |
-| D07 | open | Set budgets, pilot duration, release authorization, and recovery policy |
+| D07 | pilot resolved | User authorized implementation/publication; 24 additional calls/real UTC day, one active scout; same-commit backup and tested isolated restore |
 | D08 | open | Choose island topology, scale, visibility rules, and recurring clear-window bound |
 | D09 | open | Define vessel validation, marine limits, and expedition provisioning |
 | D10 | open | Define physical failure/return/recovery behavior at sea |
@@ -107,9 +108,9 @@ Allowed results: `not_run`, `pass`, `fail`, `blocked`. Record the command/scenar
 |---|---|---|
 | V01: Regional trade-offs | pass | Mainland fixture has no universally dominant region; scenario ratings only |
 | V02: Survival runway | pass | Coast-and-return internal journey conserves resources and fits starting supplies |
-| V03: Private knowledge | blocked | Local observations and private-view tests pass; model-action boundary integration pending |
-| V04: Travel and invalid actions | blocked | Gradual movement, replay/load/sea rejection pass; fine obstacle validation pending |
-| V05: Autonomous choices | not_run | None |
+| V03: Private knowledge | pass | Actual provider request body tested; no global geography or other inhabitants' knowledge |
+| V04: Travel and invalid actions | pass | Shared obstacles, changed-route stop/reroute, load, sequence and typed-decision validation |
+| V05: Autonomous choices | pass | Controlled staying/scouting fixtures; separate natural-agent release check |
 | V06: Salvage accounting | not_run | None |
 | V07: Retained structures / ownership | not_run | None |
 | V08: Retries and concurrent actions | blocked | In-memory and actual local Redis lease/reload tests pass; hosted-provider release check and later action types remain |

@@ -24,7 +24,15 @@ This server uses in-memory storage. It is not the production world and does not 
 - **Island foundations:** Reserved island footprints, landings, lookout connectivity, geometric sighting validation, and an illustrative recurring visibility cycle. Islands are disabled; sea routes, vessel physics, and boat rendering are not implemented.
 - **Persistence:** Atomic state/timeline/static-data commit and token-checked lease release. In-memory behavior, adapter arguments, and actual Lua execution on isolated Redis are tested. Hosted-provider behavior is verified separately during release.
 
-Travel actions are implemented as internal functions and integrated into the simulation tick, but are not yet exposed through the model proposal contract or a visitor control. The public preview therefore shows regional terrain, not autonomous expeditions.
+Travel decisions now use a separate typed model contract alongside the unchanged structure builder. `FM_EXPLORATION=1` enables decisions, provided geography and the existing server-side model connection are available. Visitors remain observers; there is no travel command in the public API. The private preview uses no model calls.
+
+### Autonomous scouting pilot
+
+The inhabitant receives their own profile/needs, up to 192 recent observed tiles, observed camp structures, their pack, camp stocks while at camp, and safe known-frontier destinations with round-trip estimates. Other inhabitants' observations and the global geography are omitted. Model output is restricted to `stay`, `scout`, or `return`, a short reason, and offered coordinates for scouting.
+
+One expedition can be underway at once. New decisions are limited to 24 additional model calls per real UTC day, a 720-simulation-minute personal cooldown, and a daylight departure window. Outbound routes are at most 40 tiles. Scout trips include an automatic physical return, so model latency, errors, or a daily call cap cannot strand a normal expedition. Staying is valid and is not replaced with a forced exploration fallback.
+
+Routes use shared landmark/building occupancy, revalidate against changes, and reject sea crossings. Construction preserves the camp, occupied tiles and active travel corridors. An occupied legacy camp anchor is moved to the nearest unoccupied camp tile during migration; structures and resources are never moved. Replayed, stale, invalid and unaffordable decisions fail without applying a journey.
 
 ## Scenario defaults
 
@@ -36,29 +44,30 @@ Daily consumption while away uses the inhabitant’s pack. Camp shelters and soc
 
 ## Known boundaries
 
-- The production builder still proposes structures only, within coordinates 2–19. M3 must introduce a validated decision/action contract before inhabitants autonomously use travel.
+- The production builder still designs structures only, within coordinates 2–19. The additional personal decision contract does not replace it, execute model-supplied travel code, or support permanent relocation.
 - Current physical resource production remains tied to the existing settlement. Regional freshwater/material/soil ratings do not yet allocate or replenish physical stocks.
-- Ground routes are cardinal and landmass-constrained. Fine collision against structure footprints and a shared obstacle map remain to be integrated before autonomous travel is enabled.
+- Ground routes are cardinal and landmass-constrained. Structures occupy their authoritative placement tile; cosmetic sprite overhangs do not create additional collision footprints.
 - M4 must replace immutable building location assumptions where relocation requires it. Preserve current IDs and timeline records.
 - Geographic visibility uses a bounded, flat-grid line test and landmass occlusion, not a 3D horizon model.
 - Legacy import explicitly rejects expanded worlds to prevent silently discarding carried resources and journeys.
 - `FM_GEOGRAPHY=1` enables additive migration; disabling it does not remove geography already saved. It is not a rollback mechanism.
 
-## Production migration and recovery gate
+## Production migration and recovery
 
-The user has authorized a production release. The conservative release keeps `FM_GEOGRAPHY=0`, preserving the current world schema and geography while shipping the tested source and reliability fixes; autonomous travel and boats are not exposed.
+On 2026-10-14, the user authorized the routing and AI exploration batch and publication to `firstmorrow.world`. The intended pilot flags are `FM_GEOGRAPHY=1` and `FM_EXPLORATION=1`; islands stay disabled. This enables the documented 40×38 mainland fixture and short scouting, not remote production, relocation, weather or boats.
 
-Released on 2026-10-14 as `dpl_8xz2QzLsjVE18aL28htn83goou7V`, source commit `335ac632f729dc64d4d49fb3a91d613472d9dcab`. The 37-test suite passed, including isolated real Redis execution; production health and continuing world state were verified.
+The preceding foundation release was `dpl_8xz2QzLsjVE18aL28htn83goou7V`, source `335ac632f729dc64d4d49fb3a91d613472d9dcab`, with geography disabled. Consult the root hand-off and bug tracker for the latest deployment receipt.
 
-Enabling geography later remains a separate migration gate. Source recovery is not a live-data backup, and passing local Redis tests is not production certification.
+The migration commit now captures the previous `fm:core`, `fm:live`, `fm:b` and `fm:days` in the private Redis string `fm:backup:pre-exploration-v1`, in the same lock-token-checked Lua operation. No other writer can intervene between backup and migration. Existing backup keys fail closed rather than being overwritten. The public API does not expose backups.
 
-Before a production migration:
+This atomic checkpoint supersedes the earlier pause/export procedure for this specific additive migration. It is a same-store rollback checkpoint, not an independent disaster-recovery backup. It is created only for an existing world; a new isolated preview has nothing to back up.
 
-1. Obtain approval for the specific project, code version, feature flags, and migration.
-2. Run the Redis scripts on a separate staging store, including lease expiry, wrong key types, concurrent workers, interrupted requests, and all-or-nothing visibility of state and timeline records.
-3. Pause scheduled and visitor-triggered writes through an explicit maintenance gate. Capture a consistent backup of `fm:core`, `fm:live`, `fm:b`, and `fm:days`; record key types and integrity hashes in private storage.
-4. Test restoring that snapshot into staging. Apply the additive migration there and compare original coordinates, IDs, stocks, balances, time, and historical days.
-5. Deploy first with migration off, verify the existing world, then enable only the approved feature set. Resume writers only after checks pass.
-6. If recovery is needed before new progress, restore the verified backup while writes remain paused. After new progress exists, stop writes and reconcile that progress before any restore; do not silently discard it.
+Release checks: run `npm test` with `redis-server` installed so actual Lua and isolated backup/restore tests do not skip. Run `node tests/live-clone-pilot.mjs /private/path/capture.json` on a read-only `{live,statics}` capture. That pilot performs two simulation days and repeated persistence round-trips, with controlled decisions and no production writes or model calls.
 
-The maintenance/export/restore tooling and staging Redis validation are outstanding release work. Do not represent this procedure as already executed.
+Recovery procedure:
+
+1. Prefer disabling only new decisions with `FM_EXPLORATION=0`; existing journeys still advance and return. `FM_GEOGRAPHY=0` does not undo an existing migration.
+2. If writes must stop, deploy this version with `FM_MAINTENANCE=1`. Both scheduler and visitor-triggered ticks become read-only. Wait for pre-maintenance requests to finish and confirm the lock is no longer held.
+3. Privately read the backup through authenticated Redis administration. `validateMigrationBackup` in `lib/recovery.mjs` validates schema, static joins, timeline and live consistency, and computes a SHA-256 digest. Do not place the bundle in GitHub, project files or a public endpoint.
+4. Restore into an isolated database first. The integration suite demonstrates exact state and timeline restoration using the same bundle format.
+5. Production restoration is an operator action requiring a fresh review of the data to be replaced. Reconcile progress after the checkpoint first; never silently discard it. There is deliberately no publicly callable restore route.

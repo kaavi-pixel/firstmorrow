@@ -11,6 +11,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, 'public');
 const service = createWorldService({
   kv: memoryKv(), propose: process.env.FM_PREVIEW === '1' ? null : createProposer(process.env.PPLX_API_KEY),
+  decide: process.env.FM_PREVIEW === '1' ? null : createProposer(process.env.PPLX_API_KEY, fetch, 'explore'),
+  explorationEnabled: process.env.FM_EXPLORATION === '1',
   geographyEnabled: process.env.FM_GEOGRAPHY === '1', planningEnabled: process.env.FM_PREVIEW !== '1'
 });
 const preview = process.env.FM_PREVIEW === '1';

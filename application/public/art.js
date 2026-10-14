@@ -92,7 +92,8 @@ export function createWorldRenderer(canvas,{getWorld,getSpeed,activityFor,onSele
     canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
     if(zoom===null)zoom=fit();
   }
-  const fit=()=>w<640?Math.max(1.3,w/290):Math.max(.5,Math.min(3,Math.min(w/720,h/420)));
+  const fit=()=>getWorld().geography?.version ? Math.max(.2,Math.min(w/1400,h/850))
+    :w<640?Math.max(1.3,w/290):Math.max(.5,Math.min(3,Math.min(w/720,h/420)));
   const clampZoom=z=>Math.max(getWorld().geography?.version ? .2 : .45,Math.min(5,z));
   const toWorld=(sx,sy)=>({x:(sx-w/2-panX)/zoom,y:(sy-h/2-panY)/zoom+CY});
   function zoomAt(sx,sy,next){const p=toWorld(sx,sy);zoom=clampZoom(next);panX=sx-w/2-p.x*zoom;panY=sy-h/2-(p.y-CY)*zoom;}
@@ -142,6 +143,10 @@ export function createWorldRenderer(canvas,{getWorld,getSpeed,activityFor,onSele
     world.inhabitants.forEach((person,i)=>{
       const act=activityFor(i),target=act.tile;let p=pos.get(person.id);
       if(!p){p={x:target.x,y:target.y,moving:false};pos.set(person.id,p);}
+      // Durable travel positions must not cosmetically cut corners through a
+      // structure when a newer server snapshot is several tiles ahead.
+      if(act.kind==='explore'){p.x=target.x;p.y=target.y;p.moving=true;
+        drawables.push({kind:'person',obj:person,p,act,depth:depthOf(p.x,p.y)});return;}
       const dx=target.x-p.x,dy=target.y-p.y,d=Math.hypot(dx,dy);
       if(d>.02&&step>0){const k=Math.min(1,step/d);p.x+=dx*k;p.y+=dy*k;p.moving=true;}else p.moving=false;
       if(act.hidden&&d<.1)return;

@@ -1,4 +1,5 @@
 import { START, terrainAt, findLandRoute, visibleIslands, integerPoint } from './geography.js';
+import { walkingObstacles } from './navigation.js';
 
 // Explicit scenario parameters, not physiological or engineering predictions.
 export const TRAVEL = Object.freeze({
@@ -7,7 +8,10 @@ export const TRAVEL = Object.freeze({
 });
 const clone = v => JSON.parse(JSON.stringify(v));
 const key = p => `${p.x},${p.y}`;
-export const atCamp = p => p?.x === START.x && p?.y === START.y;
+export const campOf = w => w?.exploration?.camp || START;
+export const atCamp = (p, w) => p?.x === campOf(w).x && p?.y === campOf(w).y;
+export const walkingRoute = (w, from, to, options = {}) =>
+  findLandRoute(w.geography, from, to, { ...options, blocked: walkingObstacles(w) });
 export const packedMass = p => p.water + p.food / TRAVEL.foodKcalPerKg + p.materials;
 const time = w => w.day * 1440 + w.minute;
 function state(w, personId) {
@@ -23,12 +27,13 @@ function log(w, journey, kind, text) {
 }
 export function observe(w, personId) {
   const e = state(w, personId), p = e.positions[personId], k = e.knowledge[personId];
+  const blocked = walkingObstacles(w);
   for (let dy = -TRAVEL.sightRadius; dy <= TRAVEL.sightRadius; dy++)
     for (let dx = -TRAVEL.sightRadius; dx <= TRAVEL.sightRadius; dx++) {
       const t = terrainAt(w.geography, p.x + dx, p.y + dy);
       if (!t || (t.landmass && t.landmass !== 'mainland' && !w.geography.islandsEnabled)) continue;
       const region = w.geography.regions.find(r => r.id === t.regionId);
-      k.tiles[key(t)] = { ...t, observedAt: time(w), ...(region ? { properties: clone(region.properties) } : {}) };
+      k.tiles[key(t)] = { ...t, blocked: blocked.has(key(t)), observedAt: time(w), ...(region ? { properties: clone(region.properties) } : {}) };
     }
   for (const sight of visibleIslands(w.geography, p, time(w)))
     k.islands[sight.id] = { ...sight, stage: 'sighted', observedAt: time(w), from: { ...p } };
@@ -49,19 +54,19 @@ export function inhabitantView(w, personId) {
 // Requests are internal simulation actions until M3 exposes them to the model.
 // A monotonic sequence is persisted per inhabitant, rejecting stale/replayed IDs
 // without an unbounded receipt log.
-export function startJourney(w, personId, destination, sequence, provisions = { water: 15, food: 2100, materials: 0 }) {
+export function startJourney(w, personId, destination, sequence, provisions = { water: 15, food: 2100, materials: 0 }, options = {}) {
   const e = state(w, personId);
   if (!integerPoint(destination)) throw new Error('Invalid destination.');
   e.sequences ||= {};
   if (!Number.isSafeInteger(sequence) || sequence !== (e.sequences[personId] || 0) + 1)
     throw new Error('Stale or out-of-order action.');
   if (e.journeys[personId]?.status === 'active') throw new Error('Already travelling.');
-  const origin = e.positions[personId], path = findLandRoute(w.geography, origin, destination);
+  const origin = e.positions[personId], path = walkingRoute(w, origin, destination, options);
   if (!path || path.length < 2) throw new Error('No supported land route.');
   const steps = path.length - 1;
   const durationMinutes = steps * TRAVEL.minutesPerTile;
   if (durationMinutes * 2 >= 1440) throw new Error('Route exceeds the one-day scouting envelope.');
-  const existing = e.packs[personId], departingCamp = atCamp(origin);
+  const existing = e.packs[personId], departingCamp = atCamp(origin, w);
   const additions = { water: 0, food: 0, materials: 0 };
   if (departingCamp) {
     for (const resource of Object.keys(additions)) {
@@ -88,11 +93,12 @@ export function startJourney(w, personId, destination, sequence, provisions = { 
   const journey = {
     id: `${personId}:j${sequence}`, personId, origin: { ...origin }, destination: { ...destination },
     route: path, step: 0, stepMinutes: 0, status: 'active', startedAt: time(w),
-    lastMinute: time(w), durationMinutes
+    lastMinute: time(w), durationMinutes, roundTrip: options.roundTrip === true,
+    phase: 'outbound', knownOnly: !!options.allowed
   };
   e.journeys[personId] = journey;
   observe(w, personId);
-  log(w, journey, 'departure', `${personId} leaves on a scouting journey`);
+  log(w, journey, 'departure', `${w.inhabitants.find(p=>p.id===personId).name} leaves on a scouting journey`);
   return clone({ id: journey.id, status: journey.status, durationMinutes });
 }
 
@@ -111,9 +117,23 @@ export function advanceJourneys(w) {
     // skip day-end consumption; the simulation's minute loop is authoritative.
     if (time(w) !== j.lastMinute + 1) throw new Error('Journey must advance one simulation minute at a time.');
     j.lastMinute = time(w);
+    // Revalidate on every minute, including after a restart or a new structure.
+    // A blocked route can be repaired, but never teleported through.
+    const e = state(w, personId), blocked = walkingObstacles(w);
+    if (j.route.slice(j.step + 1).some(p => blocked.has(key(p)))) {
+      const route = walkingRoute(w, e.positions[personId], j.destination,
+        j.knownOnly ? {allowed:new Set(Object.keys(e.knowledge[personId].tiles))} : {});
+      if (!route) {
+        j.status = 'blocked';
+        log(w, j, 'blocked', `${personId} stops because the route is blocked`);
+        continue;
+      }
+      j.route = route; j.step = 0; j.stepMinutes = 0;
+      log(w, j, `reroute-${time(w)}`, `${personId} takes a new route around an obstacle`);
+    }
     j.stepMinutes++;
     if (j.stepMinutes < TRAVEL.minutesPerTile) continue;
-    const e = state(w, personId), pack = e.packs[personId];
+    const pack = e.packs[personId];
     if (pack.water + 1e-9 < TRAVEL.waterPerTileL || pack.food + 1e-9 < TRAVEL.foodPerTileKcal) {
       j.status = 'failed';
       log(w, j, 'failed', `${personId} stops: carried travel supplies are exhausted`);
@@ -127,11 +147,24 @@ export function advanceJourneys(w) {
     e.positions[personId] = { ...j.route[j.step] };
     observe(w, personId);
     if (j.step === j.route.length - 1) {
+      if (j.roundTrip && j.phase === 'outbound') {
+        const route = walkingRoute(w, e.positions[personId], campOf(w),
+          j.knownOnly ? {allowed:new Set(Object.keys(e.knowledge[personId].tiles))} : {});
+        if (!route) {
+          j.status = 'blocked';
+          log(w, j, 'blocked-return', `${personId} cannot find a clear route home`);
+          continue;
+        }
+        j.phase = 'return'; j.destination = {...campOf(w)};
+        j.route = route; j.step = 0; j.stepMinutes = 0;
+        log(w, j, 'surveyed', `${w.inhabitants.find(p=>p.id===personId).name} finishes scouting and heads home`);
+        continue;
+      }
       j.status = 'completed'; j.completedAt = time(w);
-      if (atCamp(e.positions[personId])) {
+      if (atCamp(e.positions[personId], w)) {
         for (const r of ['water', 'food', 'materials']) { w.resources[r] += pack[r]; pack[r] = 0; }
       }
-      log(w, j, 'arrival', `${personId} arrives at the end of their journey`);
+      log(w, j, 'arrival', `${w.inhabitants.find(p=>p.id===personId).name} arrives${atCamp(e.positions[personId],w)?' back at camp':' at the end of their journey'}`);
     }
   }
 }

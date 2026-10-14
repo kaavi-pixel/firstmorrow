@@ -1,5 +1,6 @@
 import {validatePhysical,minimumMaterialKg,freshPhysicalState,physicalDay,conservationErrors} from './physics.js';
 import { atCamp } from './exploration.js';
+import { LANDMARKS, pointKey } from './navigation.js';
 export const NEEDS = ['water', 'food', 'shelter', 'connection', 'autonomy', 'ecology'];
 export const RESOURCES = ['water', 'food', 'energy', 'materials'];
 export const ROLES = ['Architect', 'Ecologist', 'Steward'];
@@ -91,7 +92,7 @@ export function settleDay(world, effects) {
   const personal=Object.fromEntries(world.inhabitants.map(p=>[p.id,{connection:0,autonomy:0,ecology:0}]));
   for(const effect of effects) {
     for(const e of effect.needs){
-      if(world.exploration&&!atCamp(world.exploration.positions[e.id]))continue;
+      if(world.exploration&&!atCamp(world.exploration.positions[e.id],world))continue;
       for(const k of Object.keys(personal[e.id]))personal[e.id][k]+=e[k];
     }
   }
@@ -150,9 +151,16 @@ export function importWorld(input,{keepHistory=false}={}){
 // their height, so collapsing or burning structures cannot touch. One empty tile (8 m) between
 // structures meets that for anything up to 4 m tall and leaves room to walk and carry water.
 export const SITE=Object.freeze({tileM:8,minGapTiles:1,
-  blocked:[[4,8],[4,9],[5,8],[5,9],[3,4],[4,4],[2,5],[16,17],[17,17],[17,16],[17,3],[18,4],[18,5],[3,16],[4,17],[5,17]]});
+  blocked:LANDMARKS});
 export function siteProblem(world,x,y){
   if(SITE.blocked.some(([bx,by])=>bx===x&&by===y))return 'That tile is oasis, rock or dune and cannot be built on.';
+  if(world.exploration){
+    const k=`${x},${y}`,e=world.exploration;
+    if(atCamp({x,y},world)||Object.values(e.positions).some(p=>pointKey(p)===k)||
+      Object.values(e.journeys).some(j=>j.status==='active'&&
+        (j.roundTrip?j.route:j.route.slice(j.step)).some(p=>pointKey(p)===k)))
+      return 'Keep the camp, occupied tiles and active walking routes clear.';
+  }
   const near=world.buildings.find(b=>Math.max(Math.abs(b.x-x),Math.abs(b.y-y))<=SITE.minGapTiles);
   if(near)return near.x===x&&near.y===y?'That tile is already taken.':`Too close to ${near.name}. Leave at least one empty 8 m tile between structures for access and fire spacing.`;
   return null;
@@ -163,7 +171,7 @@ export const isWorkMinute=m=>{const h=Math.floor(m/60);return (h>=8&&h<12)||(h>=
 export const currentProject=world=>world.buildings.find(b=>b.built===false)||null;
 export function workMinute(world){
   const b=currentProject(world);if(!b||!isWorkMinute(world.minute))return null;
-  const workers=world.exploration?world.inhabitants.filter(p=>atCamp(world.exploration.positions[p.id])&&world.exploration.journeys[p.id]?.status!=='active').length:WORK.workers;
+  const workers=world.exploration?world.inhabitants.filter(p=>atCamp(world.exploration.positions[p.id],world)&&world.exploration.journeys[p.id]?.status!=='active').length:WORK.workers;
   b.progressHours=Math.min(b.laborHours,b.progressHours+Math.min(WORK.workers,workers)/60);
   if(b.progressHours>=b.laborHours-1e-9){b.built=true;b.progressHours=b.laborHours;return b;}
   return null;
@@ -172,8 +180,8 @@ export const workDaysLeft=b=>(b.laborHours-b.progressHours)/(WORK.workers*8);
 export function clockLabel(world){const h=Math.floor(world.minute/60),m=world.minute%60;return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;}
 export function activityFor(world,i){
   const person=world.inhabitants[i],position=world.exploration?.positions[person.id],journey=world.exploration?.journeys[person.id];
-  if(position&&(journey?.status==='active'||!atCamp(position)))
-    return {kind:journey?.status==='active'?'explore':'rest',label:journey?.status==='active'?'Exploring nearby land':'Away from the settlement',tile:{...position}};
+  if(position&&(journey?.status==='active'||!atCamp(position,world)))
+    return {kind:journey?.status==='active'?'explore':'rest',label:journey?.status==='active'?(journey.phase==='return'?'Returning to camp':'Scouting nearby land'):'Away from the settlement',tile:{...position}};
   const h=world.minute/60,project=currentProject(world),built=world.buildings.filter(b=>b.built!==false);
   const shelter=built.find(b=>b.physical.shelterAreaM2>0),crop=built.find(b=>b.physical.cropAreaM2>0);
   const camp={x:10.5+(i-2)*.6,y:11.5+(i%2)*.5};

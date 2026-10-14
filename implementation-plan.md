@@ -157,10 +157,10 @@ Exit gate: V01 and V02 pass, and the extension does not invalidate existing worl
 
 Dependencies: M1. Priority: P0.
 
-- [ ] **LE-20A:** Implement route validation, duration, carrying limits, and incremental cost accounting. Implemented for landmass-constrained routes; fine obstacle validation remains.
-- [x] **LE-20B:** Persist journey progress; define interruption, cancellation, and return behavior. Local restart/cancellation tests pass; Redis staging still required.
+- [x] **LE-20A:** Implement route validation, duration, carrying limits, and incremental cost accounting. Shared landmark/building occupancy, safe camp migration, construction reservations and changed-route revalidation are tested.
+- [x] **LE-20B:** Persist journey progress; define interruption, cancellation, and return behavior. Restart/cancellation and physical round-trip tests pass, including real Redis persistence and isolated restore.
 - [x] **LE-20C:** Add timestamped observations at actual arrival/visibility boundaries.
-- [ ] **LE-20D:** Filter inhabitant context so unknown terrain and other inhabitants’ private observations do not leak through tool responses.
+- [x] **LE-20D:** Filter inhabitant context so unknown terrain and other inhabitants’ private observations do not leak through tool responses. The exploration provider receives `decisionInput`, never the observer/global world snapshot.
 
 Exit gate: V03, V04, V08, and V09 pass. An observer’s global view must not become an inhabitant’s knowledge.
 
@@ -168,10 +168,10 @@ Exit gate: V03, V04, V08, and V09 pass. An observer’s global view must not bec
 
 Dependencies: M2. Priority: P0.
 
-- [ ] **LE-30A:** Expose validated exploration and travel actions through the existing agent/sandbox interface.
-- [ ] **LE-30B:** Include current needs, supplies, known destinations, journey estimates, and the practical value of existing assets in decision context.
-- [ ] **LE-30C:** Allow staying and improving locally; do not inject a requirement to explore or migrate.
-- [ ] **LE-30D:** Record short decision explanations as stated reasons, separate from observed facts and completed actions.
+- [x] **LE-30A:** Expose validated exploration and travel actions through the existing agent/sandbox interface. Separate typed stay/scout/return contract uses the existing provider; the structure-code sandbox remains unchanged.
+- [x] **LE-30B:** Include current needs, supplies, known destinations, journey estimates, and the practical value of existing assets in decision context. Only observed structures are included; installed capacities are not guarantees of output.
+- [x] **LE-30C:** Allow staying and improving locally; do not inject a requirement to explore or migrate. Staying is accepted, while the existing builder continues local improvements independently.
+- [x] **LE-30D:** Record short decision explanations as stated reasons, separate from observed facts and completed actions. Person cards and chronological events distinguish chosen intent, validation result, survey completion and return.
 
 Exit gate: V05 passes with controlled fixtures. Pilot natural agents separately; model-dependent behavior is not a substitute for deterministic action tests.
 
@@ -284,7 +284,7 @@ All owners below are roles to assign during M0, not assigned people.
 | D09 | Supported marine construction, propulsion, load and weather limits, and provisioning budget | Implementer | M8 boat integration |
 | D10 | Failure at sea: waiting, return, damage, passenger survival, and recovery semantics | Implementer; Kavi approves irreversible outcomes | M8 sea-journey validation |
 
-D01 is resolved by the recovered source and integration map. D02/D03 now have explicit provisional fixture values in `application/README.md`; final visible scale and production tuning remain unapproved. New internal travel APIs do not yet change the production model’s proposal contract.
+D01 is resolved by the recovered source and integration map. On 2026-10-14 the user authorized the routing/autonomous-exploration batch and publication. D02/D03 use the documented finite 40×38 mainland, 8 m tiles, two-minute steps and conservative short-trip defaults for this pilot; further geography/art/tuning changes remain later work. The builder contract remains unchanged. The new personal decision contract is separately feature-gated; its rollout is recorded in `hand-off.md`.
 
 ## Progress protocol
 

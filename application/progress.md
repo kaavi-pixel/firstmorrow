@@ -2,6 +2,23 @@
 
 Original prompt: Continue with the Firstmorrow implementation plan, including mainland regional trade-offs and boat-accessible islands with guaranteed sighting chains.
 
+## Current increment: obstacle-aware autonomous scouting
+
+User authorized implementation and publication on 2026-10-14. Preserve the existing world and builder; enable mainland exploration only, not boats or resource extraction.
+
+QA inventory for this increment:
+
+- Routes avoid buildings and landmarks, permit empty access gaps, and revalidate obstacles before stepping.
+- Migration chooses an unoccupied camp anchor without moving a legacy structure or changing stocks.
+- The model receives only the deciding inhabitant's observations and offered frontier coordinates.
+- Stay/scout/return contracts reject unknown destinations, extra fields, stale replies and replays.
+- Scouting transfers conserved supplies, advances one tile at a time, and physically returns without another model call.
+- Decision reasoning, outcome, observed tile count and carried supplies appear in person cards; events appear in the log.
+- Real Redis creates a consistent, non-overwriting migration backup in the migration commit itself; restore is tested only on an isolated Redis child.
+- Desktop 1440×900 and mobile 390×844: initial map, person card, World/physics balances, log, settings, light/dark, rotation, pan, zoom, timeline and dismiss actions.
+- Off-happy paths: blocked routes, depleted camp reserve, expired requests, duplicate responses, private-knowledge isolation and occupied backup keys.
+- Production signoff: health, retained building IDs, advancing time, geography/feature flags, balance discrepancies, browser errors, model-decision result when the next eligible window occurs.
+
 ## Baseline
 
 Recovered the production source from deployment `dpl_GcAhTs1xsnpZ47zPsyRL4P81fUkK`, project `prj_SgYPXt92l6DGcoLanupudRiRsMuO`, on 2026-10-14. No production environment values or live-world data were downloaded. The deployed source excludes tests; baseline tests must be reconstructed rather than described as recovered.

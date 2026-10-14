@@ -1,5 +1,6 @@
 // Versioned, finite scenario geography. Scores are authored scenario parameters,
 // not physical resource stocks. Existing settlement coordinates never move.
+import { safeCamp } from './navigation.js';
 export const GEO_VERSION = 1;
 export const TILE_M = 8;
 export const LEGACY_BOUNDS = Object.freeze({ minX: 0, minY: 0, maxX: 21, maxY: 21 });
@@ -66,11 +67,12 @@ export function terrainAt(g, x, y) {
     : { x, y, kind: 'sea', landmass: null, regionId: null };
 }
 
-export function findLandRoute(g, from, to, { maxSteps = 5000 } = {}) {
+export function findLandRoute(g, from, to, { maxSteps = 5000, blocked = new Set(), allowed = null } = {}) {
   if (!integerPoint(from) || !integerPoint(to)) throw new Error('Invalid route coordinates.');
   const a = terrainAt(g, from.x, from.y), b = terrainAt(g, to.x, to.y);
   if (a?.kind !== 'land' || b?.kind !== 'land' || a.landmass !== b.landmass) return null;
   if (a.landmass !== 'mainland' && !g.islandsEnabled) return null;
+  if (blocked.has(pointKey(from)) || blocked.has(pointKey(to))) return null;
   const q = [{ ...from }], prior = new Map([[pointKey(from), null]]);
   for (let n = 0; n < q.length && n < maxSteps; n++) {
     const p = q[n];
@@ -82,7 +84,7 @@ export function findLandRoute(g, from, to, { maxSteps = 5000 } = {}) {
     for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
       const next = { x: p.x + dx, y: p.y + dy }, key = pointKey(next);
       const t = terrainAt(g, next.x, next.y);
-      if (!prior.has(key) && t?.kind === 'land' && t.landmass === a.landmass) {
+      if (!prior.has(key) && !blocked.has(key) && (!allowed || allowed.has(key)) && t?.kind === 'land' && t.landmass === a.landmass) {
         prior.set(key, p); q.push(next);
       }
     }
@@ -169,9 +171,10 @@ export function migrateGeography(world, { enabled = false } = {}) {
     return world;
   }
   const next = copy(world);
+  const camp = safeCamp(world);
   next.geography = createGeography(world.seed);
   next.exploration = {
-    version: 1, positions: Object.fromEntries(world.inhabitants.map(p => [p.id, { ...START }])),
+    version: 1, camp, positions: Object.fromEntries(world.inhabitants.map(p => [p.id, { ...camp }])),
     knowledge: Object.fromEntries(world.inhabitants.map(p => [p.id, { tiles: {}, islands: {} }])),
     journeys: {}, sequences: {},
     packs: Object.fromEntries(world.inhabitants.map(p => [p.id, { water: 0, food: 0, materials: 0 }]))

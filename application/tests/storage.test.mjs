@@ -41,7 +41,7 @@ test('Redis adapter passes commit and token release as atomic scripts', async ()
   const calls = [];
   const kv = redisKv({ eval: async (...args) => { calls.push(args); return 1; } });
   assert.equal(await kv.commit('lease', payload('data')), true);
-  assert.deepEqual(calls[0][1], [K.lock, K.core, K.live, K.statics, K.days]);
+  assert.deepEqual(calls[0][1], [K.lock, K.core, K.live, K.statics, K.days, K.backup]);
   assert.equal(calls[0][0], COMMIT_SCRIPT);
   assert.deepEqual(JSON.parse(calls[0][2][3]), { b1: 'data' });
   assert.equal(await kv.release(K.lock, 'lease'), true);

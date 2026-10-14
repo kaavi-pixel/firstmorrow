@@ -62,9 +62,10 @@
 
     <section data-view="settings">
       <h3>About</h3>
-      <p id="preview-note" class="muted small" hidden>Development preview only. This in-memory world is separate from production, makes no model calls, and may reset. Regional terrain is implemented; autonomous travel and boats are not enabled.</p>
+      <p id="preview-note" class="muted small" hidden>Development preview only. This in-memory world is separate from production, makes no model calls, and may reset. Boats remain disabled.</p>
       <p class="muted small">One shared world that keeps running when nobody is watching. Everyone sees the same day.</p>
       <p class="muted small">Every structure is designed by <span id="agent-model">an AI</span>, at most <span id="agent-cap">24</span> proposals a day. Its code runs in a sandbox on the server.</p>
+      <p class="muted small">When exploration is enabled, inhabitants make up to 24 additional decisions per real day using their own observations. Short scouting trips carry supplies and return to camp. Staying is a valid choice; regional ratings do not yet provide extractable resources.</p>
       <p class="muted small">Drag the timeline to see any past day as it ended.</p>
       <dl class="facts"><div><dt>Running since</dt><dd id="since">–</dd></div><div><dt>Proposals today</dt><dd id="cap-used">–</dd></div></dl>
       <div class="row"><button id="theme" class="btn">Theme</button></div>
