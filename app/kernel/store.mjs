@@ -9,12 +9,33 @@
 // first attempt's world, its history, or its pre-exploration backup.
 
 import { randomUUID } from 'node:crypto';
+import { createTerrain } from '../public/terrain.mjs';
 
 export const KEYS = Object.freeze({
   world: 'fm2:world',
   lock: 'fm2:lock',
   sched: 'fm2:sched',
 });
+
+// JSON has no Map. The terrain is a Map, so without this every request after the
+// first one crashed on `terrain.tiles.values is not a function`. Tag Maps on the
+// way out and rebuild them on the way in.
+const MAP_TAG = '__fm_map';
+export const encodeState = S => JSON.stringify(S, (_k, v) => (v instanceof Map ? { [MAP_TAG]: [...v] } : v));
+export const decodeState = raw => JSON.parse(raw, (_k, v) => {
+  if (v && typeof v === 'object' && Array.isArray(v[MAP_TAG])) return new Map(v[MAP_TAG]);
+  return v;
+});
+
+// A record written before the Map fix has an empty object where the tiles should
+// be. Keep the people, structures and clock; rebuild the land from its seed.
+export function repairState(S) {
+  if (!S) return S;
+  if (!S.terrain || !(S.terrain.tiles instanceof Map) || S.terrain.tiles.size === 0) {
+    S.terrain = createTerrain(S.seed ?? 2049);
+  }
+  return S;
+}
 
 // Redis runs each script atomically. Both the commit and the release compare the
 // lease token, so an expired worker cannot overwrite newer work.
@@ -41,10 +62,10 @@ export function memoryStore() {
     kind: 'memory',
     async acquire(token) { if (m.has(KEYS.lock)) return false; m.set(KEYS.lock, token); return true; },
     async release(token) { if (m.get(KEYS.lock) !== token) return false; m.delete(KEYS.lock); return true; },
-    async load() { const raw = m.get(KEYS.world); return raw ? JSON.parse(raw) : null; },
+    async load() { const raw = m.get(KEYS.world); return raw ? decodeState(raw) : null; },
     async commit(token, state) {
       if (m.get(KEYS.lock) !== token) return false;
-      m.set(KEYS.world, JSON.stringify(state));
+      m.set(KEYS.world, encodeState(state));
       return true;
     },
     async reset() { m.clear(); },
@@ -57,9 +78,13 @@ export function redisStore(redis) {
     kind: 'redis',
     async acquire(token) { return (await redis.set(KEYS.lock, token, { nx: true, ex: LOCK_TTL_S })) === 'OK'; },
     async release(token) { return Number(await redis.eval(RELEASE_SCRIPT, [KEYS.lock], [token])) === 1; },
-    async load() { const raw = await redis.get(KEYS.world); return raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null; },
+    async load() {
+      const raw = await redis.get(KEYS.world);
+      if (!raw) return null;
+      return decodeState(typeof raw === 'string' ? raw : JSON.stringify(raw));
+    },
     async commit(token, state) {
-      const ok = Number(await redis.eval(COMMIT_SCRIPT, [KEYS.lock, KEYS.world], [token, JSON.stringify(state)])) === 1;
+      const ok = Number(await redis.eval(COMMIT_SCRIPT, [KEYS.lock, KEYS.world], [token, encodeState(state)])) === 1;
       return ok;
     },
     async reset() { await redis.del(KEYS.world); },
@@ -79,7 +104,7 @@ export function createService({
 
   async function read() {
     if (cache) return cache;
-    cache = (await store.load()) || build();
+    cache = repairState((await store.load()) || build());
     return cache;
   }
 
