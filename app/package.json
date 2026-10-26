@@ -1,0 +1,15 @@
+{
+  "name": "firstmorrow",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "quickjs-emscripten": "^0.32.0"
+  }
+}
