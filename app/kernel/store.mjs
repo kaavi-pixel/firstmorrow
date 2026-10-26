@@ -9,7 +9,7 @@
 // first attempt's world, its history, or its pre-exploration backup.
 
 import { randomUUID } from 'node:crypto';
-import { createTerrain } from '../public/terrain.mjs';
+import { createTerrain, addWildFood } from '../public/terrain.mjs';
 
 export const KEYS = Object.freeze({
   world: 'fm2:world',
@@ -34,6 +34,9 @@ export function repairState(S) {
   if (!S.terrain || !(S.terrain.tiles instanceof Map) || S.terrain.tiles.size === 0) {
     S.terrain = createTerrain(S.seed ?? 2049);
   }
+  // A world saved before wild food existed gets it once, keeping everything it
+  // has already used up.
+  addWildFood(S.terrain);
   return S;
 }
 

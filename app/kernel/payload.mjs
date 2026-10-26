@@ -16,8 +16,8 @@ function activityFor(S, p) {
   // The people's own behaviour decides what they are doing; this is just how it
   // is drawn.
   const kind = p.activity || 'idle';
-  const art = { sleep: 'sleep', drink: 'walk', eat: 'walk', fetch: 'walk', carry: 'walk',
-    walk: 'walk', shelter: 'idle', cower: 'idle', 'no-water': 'idle', idle: 'idle', dying: 'idle' };
+  const art = { sleep: 'sleep', drink: 'walk', eat: 'walk', fetch: 'walk', carry: 'walk', forage: 'walk',
+    build: 'build', walk: 'walk', shelter: 'idle', cower: 'idle', 'no-water': 'idle', idle: 'idle', dying: 'idle' };
   return { tile: { x: p.x, y: p.y }, kind: art[kind] || 'idle', doing: kind };
 }
 

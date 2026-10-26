@@ -63,3 +63,21 @@ test('repairState leaves a healthy world untouched', () => {
   repairState(S);
   assert.equal(S.terrain, same, 'nothing was rebuilt');
 });
+
+test('a world saved before wild food existed is given it once, and only once', () => {
+  const S = createWorld({ seed: 2049 });
+  // Look like an older save: no food on any tile, no forage index.
+  const tiles = [...S.terrain.tiles.values()];
+  for (const t of tiles) delete t.food;
+  delete S.terrain.forage;
+  repairState(S);
+
+  assert.ok(S.terrain.forage.length > 100, 'the land can be foraged again');
+  assert.ok(tiles.filter(t => t.food > 0).length > 100, 'and the tiles carry food');
+  assert.ok(S.terrain.tiles.get(OASIS_KEY).food > 0, 'the spring country especially');
+
+  // Now eat a tile down and repair again: used-up ground must not refill.
+  S.terrain.tiles.get(OASIS_KEY).food = 0;
+  repairState(S);
+  assert.equal(S.terrain.tiles.get(OASIS_KEY).food, 0, 'used-up ground is not refilled');
+});

@@ -151,15 +151,20 @@ export function applyDeclarations(S, person, decl) {
   // --- draw: take raw substance out of the ground --------------------------
   if (decl.draw !== undefined) {
     const want = decl.draw || {};
-    for (const s of Object.keys(want)) if (!['water', 'soil', 'material'].includes(s)) throw new Error(`Cannot draw ${s}.`);
+    for (const s of Object.keys(want)) if (!['water', 'food', 'soil', 'material'].includes(s)) throw new Error(`Cannot draw ${s}.`);
     const room = RULES.carryKg - packMass(person);
-    const got = { water: 0, soil: 0, material: 0 };
-    for (const s of ['water', 'soil', 'material']) {
+    const got = { water: 0, food: 0, soil: 0, material: 0 };
+    for (const s of ['water', 'food', 'soil', 'material']) {
       const q = amt(want, s);
       if (Number.isNaN(q)) throw new Error(`draw.${s} must be a number.`);
       if (q <= 0) continue;
-      const available = s === 'water' ? here.potable || 0 : s === 'soil' ? here.soil || 0 : here.material || 0;
-      const canTake = Math.min(q, available, s === 'water' || s === 'material' ? room : room);
+      // Food is kcal and is massed by foodKcalPerKg, so gathering 1 kg of it is
+      // 3500 kcal. Everything else is already kilograms.
+      const available = s === 'water' ? here.potable || 0
+        : s === 'food' ? here.food || 0
+          : s === 'soil' ? here.soil || 0 : here.material || 0;
+      const roomFor = s === 'food' ? room * RULES.foodKcalPerKg : room;
+      const canTake = Math.min(q, available, roomFor);
       if (canTake <= 1e-9) continue;
       if (s === 'water') here.potable = Math.max(0, (here.potable || 0) - canTake);
       else here[s] = Math.max(0, (here[s] || 0) - canTake);

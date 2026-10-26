@@ -18,7 +18,8 @@ import { weatherOn } from './weather.mjs';
 
 export const INSTINCT_MINUTES = 2;
 export const KEEP_DAYS = 1.5;     // water they like to have on them, in days
-export const CAMP_DAYS = 3;       // camp stock they try to keep, in days
+export const CAMP_DAYS = 3;       // camp water they try to keep, in days
+export const FOOD_DAYS = 2;       // camp food they try to keep, in days
 
 const PEOPLE_AT = (S, x, y) => S.people.filter(p => p.alive && p.x === x && p.y === y).length;
 
@@ -30,6 +31,20 @@ function nearestWater(S, p) {
     if (d > RULES.reachTiles || d >= bestD) continue;
     const t = terrainAt(S.terrain, s.x, s.y);
     if (!t || !(t.potable > 0)) continue;
+    bestD = d; best = s;
+  }
+  return best;
+}
+
+/** The nearest tile with anything worth eating on it. A person will walk for food,
+ *  and when they are starving they will walk much further than they like to. */
+function nearestForage(S, p, radius = RULES.reachTiles) {
+  let best = null, bestD = Infinity;
+  for (const s of S.terrain.forage || []) {
+    const d = Math.abs(s.x - p.x) + Math.abs(s.y - p.y);
+    if (d > radius || d >= bestD) continue;
+    const t = terrainAt(S.terrain, s.x, s.y);
+    if (!t || !(t.food > 0)) continue;
     bestD = d; best = s;
   }
   return best;
@@ -82,27 +97,34 @@ function findRoute(S, from, to, limit = 1500) {
 function stepToward(S, p, target) {
   if (p.x === target.x && p.y === target.y) { p.nav = null; return false; }
   let nav = p.nav;
-  if (!nav || nav.goal.x !== target.x || nav.goal.y !== target.y) {
+  // Rebuild when the goal changed, or when the cached route has run out without
+  // arriving — a stale route must never leave them standing still.
+  if (!nav || nav.goal.x !== target.x || nav.goal.y !== target.y || !nav.steps.length) {
     nav = { goal: { x: target.x, y: target.y }, steps: findRoute(S, p, target) };
     p.nav = nav;
   }
   while (nav.steps.length) {
     const k = nav.steps[0];
     const x = k & 127, y = (k - x) / 128;
-    if (PEOPLE_AT(S, x, y) > 3) return false;            // crowded; wait a turn
+    // Crowded; wait a turn, keeping the route. The camp tile is never too crowded —
+    // everyone has to be able to get home, or they jam at the doorway and starve.
+    const isCamp = x === S.camp.x && y === S.camp.y;
+    if (!isCamp && PEOPLE_AT(S, x, y) > 4) return false;
     nav.steps.shift();
     p.x = x; p.y = y;
     p.pack.food = Math.max(0, p.pack.food - RULES.kcalPerTileWalk);
     p.activity = 'walk';
     return true;
   }
-  // No route at all: step the way they want to go, and if that is blocked, any
-  // way that is not water. Someone on a shore gets onto land either way.
+  // No route at all: take one step that is not water and not where they already
+  // stand. Moving "onto" your own tile is how a person walks in place forever.
   const dx = Math.sign(target.x - p.x), dy = Math.sign(target.y - p.y);
-  const options = [[p.x + dx, p.y], [p.x, p.y + dy], [p.x + dx, p.y + dy],
+  const options = [[p.x + dx, p.y + dy], [p.x + dx, p.y], [p.x, p.y + dy],
     [p.x + 1, p.y], [p.x - 1, p.y], [p.x, p.y + 1], [p.x, p.y - 1]];
   for (const [x, y] of options) {
-    if (!walkable(S.terrain, x, y) || terrainAt(S.terrain, x, y).regionId === 'sea') continue;
+    if (x === p.x && y === p.y) continue;
+    const t = terrainAt(S.terrain, x, y);
+    if (!t || !walkable(S.terrain, x, y) || t.regionId === 'sea') continue;
     p.x = x; p.y = y;
     p.pack.food = Math.max(0, p.pack.food - RULES.kcalPerTileWalk);
     p.activity = 'walk';
@@ -126,7 +148,21 @@ function drink(S, p) {
   return true;
 }
 
+/** Gather what is edible underfoot, the same way they drink. */
+function gather(S, p) {
+  const tile = terrainAt(S.terrain, p.x, p.y);
+  if (!tile || !(tile.food > 0)) return false;
+  const room = Math.max(0, RULES.carryKg - packMass(p));
+  const want = Math.min(tile.food, room * RULES.foodKcalPerKg, 2 * RULES.foodPerPersonDay);
+  if (want <= 1) return false;
+  tile.food -= want;
+  p.pack.food += want;
+  p.activity = 'forage';
+  return true;
+}
+
 const outFetching = S => S.people.filter(q => q.alive && q.goal && q.goal.kind === 'water').length;
+const outForaging = S => S.people.filter(q => q.alive && q.goal && q.goal.kind === 'food').length;
 
 const unfinishedNear = (S, p) => {
   let best = null, bestD = Infinity;
@@ -194,14 +230,31 @@ function act(S, p, w, hour) {
       return;
     }
     p.activity = 'fetch';
-    if (!stepToward(S, p, at)) p.goal = { kind: 'home' };
+    // A blocked step is not a failed errand. Only give up after a real run of
+    // attempts, or a crowd at a doorway becomes a death sentence.
+    if (!stepToward(S, p, at)) { p.stuck = (p.stuck || 0) + 1; if (p.stuck > 8) { p.goal = { kind: 'home' }; p.stuck = 0; } }
+    else p.stuck = 0;
+    return;
+  }
+  if (p.goal && p.goal.kind === 'food') {
+    const at = p.goal.at;
+    if (p.x === at.x && p.y === at.y) {
+      if (!gather(S, p)) { p.goal = { kind: 'home' }; return; }
+      const here = terrainAt(S.terrain, p.x, p.y);
+      if (p.pack.food >= 2 * RULES.foodPerPersonDay || !here || !(here.food > 0)) p.goal = { kind: 'home' };
+      return;
+    }
+    p.activity = 'forage';
+    if (!stepToward(S, p, at)) { p.stuck = (p.stuck || 0) + 1; if (p.stuck > 8) { p.goal = { kind: 'home' }; p.stuck = 0; } }
+    else p.stuck = 0;
     return;
   }
   if (p.goal && p.goal.kind === 'home') {
     if (atCamp) p.goal = null;                        // arrived; fall through
     else {
       p.activity = 'carry';
-      if (!stepToward(S, p, S.camp)) p.goal = null;
+      if (!stepToward(S, p, S.camp)) { p.stuck = (p.stuck || 0) + 1; if (p.stuck > 12) { p.goal = null; p.stuck = 0; } }
+      else p.stuck = 0;
       return;
     }
   }
@@ -209,6 +262,7 @@ function act(S, p, w, hour) {
   // ----------------------------------------------------------------- away from camp
   if (!atCamp) {
     if (p.health < 25) { p.goal = { kind: 'home' }; p.activity = 'carry'; stepToward(S, p, S.camp); return; }
+    // Thirst first: three days without water and they are dead.
     if (p.pack.water < need * 0.6) {
       const water = nearestWater(S, p);
       p.goal = water ? { kind: 'water', at: water } : { kind: 'home' };
@@ -216,29 +270,64 @@ function act(S, p, w, hour) {
       stepToward(S, p, water || S.camp);
       return;
     }
-    if (p.pack.water > keep) { p.goal = { kind: 'home' }; p.activity = 'carry'; stepToward(S, p, S.camp); return; }
-    if (p.pack.food < RULES.foodPerPersonDay * 0.3 && tile) {
+    // Water they are already carrying goes home before anything else. Fetching a
+    // load and then wandering off to forage would leave the camp dry.
+    if (p.pack.water > keep) {
+      p.goal = { kind: 'home' }; p.activity = 'carry'; stepToward(S, p, S.camp); return;
+    }
+    // Then hunger. They will walk for food before they will stand about, and a
+    // starving person walks further than a comfortable one.
+    if (p.pack.food < RULES.foodPerPersonDay * 0.8) {
+      if (tile && tile.food > 0 && gather(S, p)) return;
+      const desperate = p.pack.food < RULES.foodPerPersonDay * 0.3;
+      const food = nearestForage(S, p, desperate ? RULES.reachTiles * 6 : RULES.reachTiles);
+      if (food) { p.goal = { kind: 'food', at: food }; p.activity = 'forage'; stepToward(S, p, food); return; }
       const store = S.structures.find(s => s.built && s.store && s.store.food > 0 &&
         Math.abs(s.x - p.x) + Math.abs(s.y - p.y) <= 1);
       if (store) {
-        const got = Math.min(store.store.food, RULES.foodPerPersonDay, Math.max(0, RULES.carryKg * RULES.foodKcalPerKg - packMass(p)));
+        const got = Math.min(store.store.food, 2 * RULES.foodPerPersonDay, Math.max(0, RULES.carryKg * RULES.foodKcalPerKg - packMass(p)));
         if (got > 0) { store.store.food -= got; p.pack.food += got; p.activity = 'eat'; return; }
       }
     }
-    p.resting = asleep;
-    p.activity = asleep ? 'sleep' : 'walk';
+    // Carrying a load of food home.
+    if (p.pack.food > 2 * RULES.foodPerPersonDay) {
+      p.goal = { kind: 'home' }; p.activity = 'carry'; stepToward(S, p, S.camp); return;
+    }
+    // Nothing to do out here. Somewhere else is better than here, and home is
+    // where the water is.
+    p.activity = asleep ? 'sleep' : 'carry';
+    stepToward(S, p, S.camp);
     return;
   }
 
   // ---------------------------------------------------------------------- at camp
-  // Put down what they are carrying.
+  // Put down what they are carrying. Water goes in the butt, food in the larder,
+  // and they keep about one day of food on them so they can walk out and eat.
   if (p.pack.water > keep) { S.camp.stock.water += p.pack.water - keep; p.pack.water = keep; }
+  const foodKeep = RULES.foodPerPersonDay;
+  if (p.pack.food > foodKeep * 1.05) {
+    S.camp.stock.food += p.pack.food - foodKeep;
+    p.pack.food = foodKeep;
+  }
 
-  // Then decide whether the camp needs water fetched.
-  const storeDays = S.camp.stock.water / (need * Math.max(1, S.people.filter(q => q.alive).length));
-  if (storeDays < CAMP_DAYS && !asleep && outFetching(S) < 2) {
+  const alive = Math.max(1, S.people.filter(q => q.alive).length);
+
+  // Water is the emergency: a person is dead in three days without it. When the
+  // butt is nearly dry, nobody stays behind.
+  const waterDays = S.camp.stock.water / (need * alive);
+  const waterCrew = waterDays < 1 ? 5 : 2;
+  if (waterDays < CAMP_DAYS && (!asleep || waterDays < 1) && outFetching(S) < waterCrew) {
     const water = nearestWater(S, p);
     if (water) { p.goal = { kind: 'water', at: water }; p.activity = 'fetch'; stepToward(S, p, water); return; }
+  }
+
+  // Then food: they keep the larder stocked before they lift a finger to build.
+  // An empty larder is everyone's problem; a low one is a few people's.
+  const foodDays = S.camp.stock.food / (RULES.foodPerPersonDay * alive);
+  const foodCrew = foodDays < 1 ? 5 : 3;
+  if (foodDays < FOOD_DAYS && (!asleep || foodDays < 1) && outForaging(S) < foodCrew) {
+    const food = nearestForage(S, p);
+    if (food) { p.goal = { kind: 'food', at: food }; p.activity = 'forage'; stepToward(S, p, food); return; }
   }
 
   // There is a surplus, so fill the canteen before anything else goes wrong.
@@ -248,12 +337,14 @@ function act(S, p, w, hour) {
     if (top > 0.1) { S.camp.stock.water -= top; p.pack.water += top; }
   }
 
-  if (p.pack.food < RULES.foodPerPersonDay * 0.8 && S.camp.stock.food > 0) {
-    const want = Math.min(2 * RULES.foodPerPersonDay, S.camp.stock.food, Math.max(0, RULES.carryKg * RULES.foodKcalPerKg - packMass(p)));
+  // Top the pack up to a day's food, and never more — taking two days and putting
+  // one back is a loop that keeps them standing at the larder all day.
+  if (p.pack.food < foodKeep * 0.6 && S.camp.stock.food > 0) {
+    const want = Math.min(foodKeep - p.pack.food, S.camp.stock.food, Math.max(0, RULES.carryKg * RULES.foodKcalPerKg - packMass(p)));
     if (want > 0) { S.camp.stock.food -= want; p.pack.food += want; p.activity = 'eat'; return; }
   }
 
-  // Nothing urgent. Somebody designed something and it is not standing yet.
+  // Only now, with water and food in hand, does anyone build.
   const site = unfinishedNear(S, p);
   if (site && build(S, p, site, asleep)) return;
 

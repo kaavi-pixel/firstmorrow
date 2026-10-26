@@ -90,3 +90,35 @@ test('the oasis is where the terrain says it is', () => {
   const t = terrainAt(S.terrain, OASIS.x, OASIS.y);
   assert.ok(t.potable > 0, 'the spring is real and drinkable');
 });
+
+test('with an empty larder they forage before they build', () => {
+  const S = createWorld({ seed: 2049 });
+  // Somebody has designed a water butt and it is not standing yet.
+  S.structures.push({
+    id: 'site1', name: 'Water butt', x: S.camp.x + 1, y: S.camp.y, authorId: S.authors[0].id,
+    built: false, laborHours: 40, progressHours: 0, shelter: 0, store: { water: 0, food: 0 }, program: null,
+  });
+  S.camp.stock.food = 0;
+  for (const p of S.people) p.pack.food = 0;
+  advance(S, 2);
+  assert.equal(S.structures[0].progressHours, 0, 'nobody lifts a finger to build on an empty larder');
+  assert.ok(S.people.every(p => p.goal && p.goal.kind === 'food'), 'everyone sets out for food instead');
+  advance(S, 1440);
+  assert.ok(S.camp.stock.food > 0, 'and they bring some home');
+  advance(S, 1440 * 7);
+  assert.ok(S.structures[0].progressHours > 0, 'only once the larder is stocked do they build');
+  assert.ok(living(S).every(p => (p.starving || 0) < 0.6), 'nobody starved waiting');
+});
+
+test('a starving person walks further for food than a comfortable one', () => {
+  const S = createWorld({ seed: 2049 });
+  const p = S.people[0];
+  const far = [...S.terrain.tiles.values()].find(t => t.food > 0 &&
+    Math.abs(t.x - p.x) + Math.abs(t.y - p.y) > RULES.reachTiles &&
+    Math.abs(t.x - p.x) + Math.abs(t.y - p.y) < RULES.reachTiles * 4);
+  assert.ok(far, 'the map has food beyond their usual radius');
+  p.pack.food = 0;               // desperate
+  S.camp.stock.food = 0;
+  advance(S, 1440 * 6);
+  assert.ok(S.camp.stock.food > 0 || p.pack.food > 0, 'someone reached the far food');
+});

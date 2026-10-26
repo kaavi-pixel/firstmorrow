@@ -56,7 +56,7 @@ test('the boundary is handed to every author, and it names the real limits', () 
 
 test('authors do not die, age, or eat', () => {
   const S = createWorld();
-  advance(S, 1440 * 90);
+  advance(S, 1440 * 200);
   assert.equal(S.authors.length, 3, 'all three are still here');
   assert.ok(S.authors.every(a => a.alive), 'none of them died with the people');
   assert.equal(S.people.filter(p => p.alive).length, 0, 'while every person did');

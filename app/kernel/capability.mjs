@@ -24,8 +24,9 @@ export function rulesBrief() {
     `Water is the fast killer: without it, about ${RULES.daysToDieWithoutWater} days. Food is the slow one: about ${RULES.daysToDieWithoutFood} days. Children under five and people over sixty go first.`,
     `Work: ${RULES.laborHoursPerDay} person-hours per person per day, and less for anyone weakened or starving. Construction costs ${RULES.buildHoursPerKg} person-hours per kg. You cannot shorten that by declaring it.`,
     `A finished structure you own may run a process: at most ${RULES.maxKgPerLaborHour} kg per labour hour. A garden yields ${RULES.soilToFoodKg} kg of food per kg of soil. A still beside the sea yields ${RULES.stillLitersPerLabourHour} L of fresh water per labour hour.`,
+    'The land itself feeds them, a little. Scrub and coast carry edible plants a person can gather by hand, and they will walk for it when hungry. It is finite: the ground near camp is stripped bare within a season or two. Wild food buys time. It does not keep them alive.',
     `Weather is real and destructive. Storms destroy what is not built to stand: roughly ${WEATHER.stormMassPerSeverity} kg of structure per point of severity. Anyone caught in the open loses health.`,
-    'The people act for themselves — they will walk to water they can see, eat when there is food, and take cover from a storm. They cannot invent, build or plan. That is your work.',
+    'The people act for themselves — they will walk to water they can see, gather food when the larder is low, drink and eat before they build, and take cover from a storm. They cannot invent, build or plan. That is your work.',
     `People age, and die of it. They can conceive and bear children, but only while they are healthy and there is food.`,
     'There is no rescue. No free materials, no repair, no rollback, no bringing back the dead.',
     'You may build anything reality permits. You may change nothing about reality.',
@@ -41,7 +42,7 @@ export function structureEnv(S, s) {
     day,
     time: { hour: +hourOfDay(S).toFixed(1), season: w.season, tempC: w.tempC, stormToday: !!w.storm, stormSeverity: w.storm?.severity ?? 0 },
     structure: { id: s.id, name: s.name, x: s.x, y: s.y, shelter: s.shelter || 0 },
-    here: { x: s.x, y: s.y, region: t?.regionId, water: t?.potable || 0, soil: t?.soil || 0, material: t?.material || 0 },
+    here: { x: s.x, y: s.y, region: t?.regionId, water: t?.potable || 0, food: t?.food || 0, soil: t?.soil || 0, material: t?.material || 0 },
     camp: {
       stock: { ...S.camp.stock },
       people: living(S).map(p => ({
@@ -68,7 +69,7 @@ export function authorView(S, authorId) {
       if (!t) continue;
       const d = Math.hypot(x - camp.x, y - camp.y);
       if (d > SURVEY_TILES) continue;
-      observed.push({ x, y, region: t.regionId, water: t.potable || 0, soil: t.soil || 0, material: t.material || 0 });
+      observed.push({ x, y, region: t.regionId, water: t.potable || 0, food: t.food || 0, soil: t.soil || 0, material: t.material || 0 });
     }
   }
 
