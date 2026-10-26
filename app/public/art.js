@@ -137,6 +137,8 @@ export function createWorldRenderer(canvas,{getWorld,getSpeed,activityFor,onSele
     }
     const oasis=geo?.oasis;if(oasis)for(const [x,y] of [[oasis.x,oasis.y],[oasis.x,oasis.y+1],[oasis.x+1,oasis.y],[oasis.x+1,oasis.y+1]]){const p=proj(x,y);quad(square(x-.5,y-.5),'#b0ab7b');quad(square(x-.5,y-.5,1,.1),'#819e95',-1);c.fillStyle='#acc0a9';c.fillRect(p.x-4,p.y-2,8,1);}
     const drawables=world.buildings.map(b=>({kind:'building',obj:b,depth:depthOf(b.x,b.y)}));
+    const stackCounts=new Map(),STACK_OFFSETS=[[0,0],[4,-2],[-4,-2],[4,-4],[-4,-4],[0,-4],[8,-4],[-8,-4]];
+    const stackOffset=(x,y)=>{const k=Math.round(x)+','+Math.round(y);const n=stackCounts.get(k)||0;stackCounts.set(k,n+1);return STACK_OFFSETS[n%STACK_OFFSETS.length];};
     const speed=getSpeed(),step=Math.min(dt,.25)*(speed?Math.min(1.2+speed*.08,6):0);
     world.inhabitants.forEach((person,i)=>{
       const act=activityFor(i),target=act.tile;let p=pos.get(person.id);
@@ -144,18 +146,18 @@ export function createWorldRenderer(canvas,{getWorld,getSpeed,activityFor,onSele
       // Durable travel positions must not cosmetically cut corners through a
       // structure when a newer server snapshot is several tiles ahead.
       if(act.kind==='explore'){p.x=target.x;p.y=target.y;p.moving=true;
-        drawables.push({kind:'person',obj:person,p,act,depth:depthOf(p.x,p.y)});return;}
+        const [ox,oy]=stackOffset(p.x,p.y);drawables.push({kind:'person',obj:person,p,act,depth:depthOf(p.x,p.y),ox,oy});return;}
       const dx=target.x-p.x,dy=target.y-p.y,d=Math.hypot(dx,dy);
       if(d>.02&&step>0){const k=Math.min(1,step/d);p.x+=dx*k;p.y+=dy*k;p.moving=true;}else p.moving=false;
       if(act.hidden&&d<.1)return;
-      drawables.push({kind:'person',obj:person,p,act,depth:depthOf(p.x,p.y)});
+      const [ox,oy]=stackOffset(p.x,p.y);drawables.push({kind:'person',obj:person,p,act,depth:depthOf(p.x,p.y),ox,oy});
     });
     for(const agent of getAgents()){
       const act=agentActivity(agent);if(!act)continue;const target=act.tile;let p=pos.get(agent.id);
       if(!p){p={x:21,y:11,moving:false};pos.set(agent.id,p);}
       const dx=target.x-p.x,dy=target.y-p.y,d=Math.hypot(dx,dy);
       if(d>.02&&step>0){const k=Math.min(1,step*.8/d);p.x+=dx*k;p.y+=dy*k;p.moving=true;}else p.moving=false;
-      drawables.push({kind:'agent',obj:agent,p,act,depth:depthOf(p.x,p.y)});
+      const [ox,oy]=stackOffset(p.x,p.y);drawables.push({kind:'agent',obj:agent,p,act,depth:depthOf(p.x,p.y),ox,oy});
     }
     drawables.sort((a,b)=>a.depth-b.depth);const bubbles=[];
     for(const item of drawables){
@@ -177,22 +179,22 @@ export function createWorldRenderer(canvas,{getWorld,getSpeed,activityFor,onSele
         }
         hit.push({x:p.x-24,y:p.y-43,w:48,h:48,type:'building',id:b.id});
       }else if(item.kind==='agent'){
-        const pt=proj(item.p.x,item.p.y);diamond(pt.x,pt.y+2,7,3,'#896b4e66');
+        const pt=proj(item.p.x,item.p.y);const ox=item.ox||0,oy=item.oy||0;diamond(pt.x+ox,pt.y+2+oy,7,3,'#896b4e66');
         let img=peopleCache.get(item.obj.id);if(!img){img=document.createElement('canvas');paintAgent(img,item.obj);peopleCache.set(item.obj.id,img);}
         const bob=item.p.moving&&Math.sin(time*9+item.depth)>0?1:0,hover=reduced.matches?0:Math.round(Math.sin(time*2.5));
-        c.drawImage(img,0,0,8,3,Math.round(pt.x-6),Math.round(pt.y-30-bob+hover),12,4.5);
-        c.drawImage(img,0,3,8,12,Math.round(pt.x-6),Math.round(pt.y-18-bob),12,18);
-        if(item.act.kind==='think'&&!reduced.matches){c.fillStyle=item.obj.color;for(let k=0;k<3;k++)if(Math.floor(time*2)%3>=k)c.fillRect(Math.round(pt.x+7+k*3),Math.round(pt.y-24),2,2);}
-        bubbles.push({obj:item.obj,x:pt.x,y:pt.y-34});
-        hit.push({x:pt.x-10,y:pt.y-32,w:20,h:36,type:'agent',id:item.obj.id});
+        c.drawImage(img,0,0,8,3,Math.round(pt.x-6+ox),Math.round(pt.y-30-bob+hover+oy),12,4.5);
+        c.drawImage(img,0,3,8,12,Math.round(pt.x-6+ox),Math.round(pt.y-18-bob+oy),12,18);
+        if(item.act.kind==='think'&&!reduced.matches){c.fillStyle=item.obj.color;for(let k=0;k<3;k++)if(Math.floor(time*2)%3>=k)c.fillRect(Math.round(pt.x+7+k*3+ox),Math.round(pt.y-24+oy),2,2);}
+        bubbles.push({obj:item.obj,x:pt.x+ox,y:pt.y-34+oy});
+        hit.push({x:pt.x-10+ox,y:pt.y-32+oy,w:20,h:36,type:'agent',id:item.obj.id});
       }else{
-        const pt=proj(item.p.x,item.p.y);diamond(pt.x,pt.y+2,7,3,'#896b4e66');
+        const pt=proj(item.p.x,item.p.y);const ox=item.ox||0,oy=item.oy||0;diamond(pt.x+ox,pt.y+2+oy,7,3,'#896b4e66');
         let img=peopleCache.get(item.obj.id);if(!img){img=document.createElement('canvas');paintPerson(img,item.obj);peopleCache.set(item.obj.id,img);}
         const bob=item.p.moving&&Math.sin(time*9+item.depth)>0?1:0;
-        if(item.act.kind==='sleep'){c.save();c.translate(Math.round(pt.x),Math.round(pt.y-3));c.rotate(-Math.PI/2);c.drawImage(img,-9,-6,12,18);c.restore();}
-        else c.drawImage(img,Math.round(pt.x-6),Math.round(pt.y-18-bob),12,18);
-        if(item.act.kind==='build'&&!reduced.matches&&Math.sin(time*6+item.depth*3)>.6){c.fillStyle='#f3e2b8';c.fillRect(Math.round(pt.x+6),Math.round(pt.y-14),2,2);}
-        hit.push({x:pt.x-10,y:pt.y-24,w:20,h:28,type:'person',id:item.obj.id});
+        if(item.act.kind==='sleep'){c.save();c.translate(Math.round(pt.x+ox),Math.round(pt.y-3+oy));c.rotate(-Math.PI/2);c.drawImage(img,-9,-6,12,18);c.restore();}
+        else c.drawImage(img,Math.round(pt.x-6+ox),Math.round(pt.y-18-bob+oy),12,18);
+        if(item.act.kind==='build'&&!reduced.matches&&Math.sin(time*6+item.depth*3)>.6){c.fillStyle='#f3e2b8';c.fillRect(Math.round(pt.x+6+ox),Math.round(pt.y-14+oy),2,2);}
+        hit.push({x:pt.x-10+ox,y:pt.y-24+oy,w:20,h:28,type:'person',id:item.obj.id});
       }
     }
     if(!reduced.matches){for(let i=0;i<8;i++){const px=(time*7+i*91)%640-320,py=40+(i*37)%260;c.fillStyle='#e0bd8540';c.fillRect(px,py,3,1);}}
