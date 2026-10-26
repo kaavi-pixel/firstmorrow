@@ -56,7 +56,9 @@ function renderStock() {
     <div><dt>Storms survived</dt><dd>${s.storms}</dd></div></dl>`;
 }
 function renderLog() {
-  $('log').innerHTML = payload.log.map(e => `<li><span class="muted small">day ${Math.floor((e.t || 0) / 1440) + 1}</span> ${e.text}</li>`).join('');
+  const council = (payload.council || []).map(m => `<li class="council"><span class="muted small">${m.name}</span> ${m.text}</li>`).join('');
+  const events = payload.log.map(e => `<li><span class="muted small">day ${Math.floor((e.t || 0) / 1440) + 1}</span> ${e.text}</li>`).join('');
+  $('log').innerHTML = council + events;
 }
 function openPanel(name) {
   panel = panel === name ? null : name;

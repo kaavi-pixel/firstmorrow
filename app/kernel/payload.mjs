@@ -13,10 +13,12 @@ export function regionIds(terrain) {
 
 function activityFor(S, p) {
   if (!p.alive) return { tile: { x: p.x, y: p.y }, kind: 'gone', hidden: true };
-  const hour = minuteOfDay(S) / 60;
-  if (p.resting || hour < 5.5 || hour > 21) return { tile: { x: p.x, y: p.y }, kind: 'sleep' };
-  if (S.structures.some(s => !s.built && s.x === p.x && s.y === p.y)) return { tile: { x: p.x, y: p.y }, kind: 'build' };
-  return { tile: { x: p.x, y: p.y }, kind: 'walk' };
+  // The people's own behaviour decides what they are doing; this is just how it
+  // is drawn.
+  const kind = p.activity || 'idle';
+  const art = { sleep: 'sleep', drink: 'walk', eat: 'walk', fetch: 'walk', carry: 'walk',
+    walk: 'walk', shelter: 'idle', cower: 'idle', 'no-water': 'idle', idle: 'idle', dying: 'idle' };
+  return { tile: { x: p.x, y: p.y }, kind: art[kind] || 'idle', doing: kind };
 }
 
 export function livePayload(S, now = Date.now()) {
@@ -47,10 +49,11 @@ export function livePayload(S, now = Date.now()) {
       physical: { shelterAreaM2: (s.shelter || 0) * 3.5 },
     })),
     // art.js expects inhabitants and a parallel activity list.
-    inhabitants: people.map(p => ({ id: p.id, name: p.name, color: p.color, hair: p.hair, x: p.x, y: p.y, age: Math.floor(p.age), health: Math.round(p.health) })),
+    inhabitants: people.map(p => ({ id: p.id, name: p.name, color: p.color, hair: p.hair, x: p.x, y: p.y, age: Math.floor(p.age), health: Math.round(p.health), doing: p.activity || 'idle' })),
     activities: people.map(p => activityFor(S, p)),
-    authors: S.authors.map(a => ({ id: a.id, name: a.name, model: a.model, color: a.color })),
+    authors: S.authors.map(a => ({ id: a.id, name: a.name, model: a.model, color: a.color, role: a.role })),
     authorActivity: S.authors.map(a => ({ tile: { x: a.x, y: a.y }, kind: a.say ? 'think' : 'idle' })),
+    council: (S.council || []).slice(-20).map(m => ({ name: m.name, at: m.t, text: m.text })),
     speech: Object.fromEntries([...people, ...S.authors].filter(p => p.say && S.minute - p.saidAt < 720).map(p => [p.id, p.say])),
     log: S.log.slice(-40).reverse(),
     dead: S.graveyard,

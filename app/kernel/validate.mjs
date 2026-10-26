@@ -11,12 +11,21 @@ import { terrainAt, region, walkable } from '../public/terrain.mjs';
 import { validSprite, FORMS } from '../public/forms.mjs';
 
 export const RULES = Object.freeze({
-  // Survival. From v1 (humanitarian minimums), unchanged.
-  waterPerPersonDay: 15,          // L
+  // Survival, from the real evidence rather than a guess.
+  //  - Water: ~3 days, and in a hot climate "as little as 3 days"
+  //    (NIH, 'The physiology of survival: Fluid and food', citing Wolf 1958).
+  //    Severe dehydration arrives at about 10% of body mass lost.
+  //  - Food: with water, "complete starvation usually occurs within 40-60 days";
+  //    lean adults weaken after 30-50 days (same paper). 45 is the midpoint.
+  //  - Children and the old go first (Mayo Clinic).
+  waterDrinkLDay: 3,              // drinking water for an adult at 20 C
+  waterHeatFactor: 0.047,         // each degree above 20 C adds 4.7% to the need
   foodPerPersonDay: 2100,         // kcal
   foodKcalPerKg: 3500,            // game assumption: dry food mass
   carryKg: 20,                    // what one person hauls
-  healthPerDayUnmet: 26,          // health lost per full day with a need unmet
+  daysToDieWithoutWater: 3,
+  daysToDieWithoutFood: 55,       // pure starvation alone; heat and hard labour bring it in
+  maxHealthLossPerDay: 40,        // no combination of unmet needs kills faster
 
   // Work and time.
   minutesPerTile: 2,
@@ -37,14 +46,34 @@ export const RULES = Object.freeze({
 
   // Program output.
   sayMax: 200,
+  tellMax: 280,
   sightTiles: 6,
+  reachTiles: 24,                 // how far someone will walk for water
 });
 
 export const SUBSTANCES = Object.freeze(['water', 'food', 'soil', 'material']);
 const KG_PER_UNIT = { water: 1, soil: 1, material: 1, food: 1 / RULES.foodKcalPerKg };
 export const massOf = o => SUBSTANCES.reduce((t, s) => t + (Number(o?.[s]) || 0) * KG_PER_UNIT[s], 0);
 
-const DECLARATIONS = new Set(['say', 'rest', 'move', 'draw', 'take', 'store', 'use', 'make', 'labor', 'propose']);
+/** Drinking water a person needs in a day, given the temperature. */
+export const waterNeedL = tempC =>
+  RULES.waterDrinkLDay * (1 + Math.max(0, (tempC ?? 20) - 20) * RULES.waterHeatFactor);
+
+/** How much faster the very young and the old lose ground. */
+export function fragility(age) {
+  if (age < 5) return 1.8;
+  if (age < 12) return 1.35;
+  if (age < 18) return 1.1;
+  if (age <= 60) return 1;
+  if (age <= 70) return 1.35;
+  if (age <= 80) return 1.8;
+  return 2.4;
+}
+
+/** A weakened person cannot work a full day. Reality, not a penalty. */
+export const capacity = p => Math.max(0.15, (p.health / 100) * (1 - 0.7 * Math.min(1, p.starving || 0)));
+
+const DECLARATIONS = new Set(['say', 'tell', 'rest', 'move', 'draw', 'take', 'store', 'use', 'make', 'labor', 'propose']);
 const num = v => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
 const amt = (o, s) => { const v = o?.[s]; return v === undefined ? 0 : (num(v) ?? NaN); };
 
@@ -86,6 +115,19 @@ export function applyDeclarations(S, person, decl) {
     if (typeof decl.say !== 'string') throw new Error('say must be a string.');
     const text = decl.say.trim().slice(0, RULES.sayMax);
     if (text) { person.say = text; person.saidAt = S.minute; applied.push('say'); }
+  }
+
+  // --- tell: the shared channel the authors work through ---------------------
+  if (decl.tell !== undefined) {
+    if (typeof decl.tell !== 'string') throw new Error('tell must be a string.');
+    const text = decl.tell.trim().slice(0, RULES.tellMax);
+    if (text) {
+      if (!S.council) S.council = [];
+      S.council.push({ t: S.minute, from: person.id, name: person.name, text });
+      // The council is a channel, not an archive.
+      if (S.council.length > 120) S.council.splice(0, S.council.length - 120);
+      applied.push('tell');
+    }
   }
 
   // --- rest ----------------------------------------------------------------
@@ -160,7 +202,7 @@ export function applyDeclarations(S, person, decl) {
   }
 
   // --- labour --------------------------------------------------------------
-  const hoursLeft = RULES.laborHoursPerDay - (person.labor?.used ?? 0);
+  const hoursLeft = RULES.laborHoursPerDay * capacity(person) - (person.labor?.used ?? 0);
   let hours = 0;
   if (decl.labor !== undefined) {
     const h = num(decl.labor);

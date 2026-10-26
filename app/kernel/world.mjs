@@ -5,8 +5,9 @@
 // model, and nothing in it may be changed by one.
 
 import { createTerrain, terrainAt, region, START, OASIS } from '../public/terrain.mjs';
-import { RULES, massOf, applyDeclarations } from './validate.mjs';
+import { RULES, massOf, applyDeclarations, waterNeedL, fragility } from './validate.mjs';
 import { createWeather, advanceWeather, weatherOn, stormEffect, WEATHER } from './weather.mjs';
+import { runInstincts, INSTINCT_MINUTES } from './instinct.mjs';
 
 export const MINUTES_PER_DAY = 1440;
 export const dayIndex = S => Math.floor(S.minute / MINUTES_PER_DAY);
@@ -22,9 +23,12 @@ export const PEOPLE = Object.freeze([
   { id: 'p4', name: 'Ivo', color: '#ac8587', hair: '#424443', age: 22, values: ['Autonomy-first', 'Creative'], wish: 'Give me tools, room to experiment, and the freedom to be different.' },
 ]);
 
-// The authors. They do not eat, age, sicken or die. They write code.
+// The authors. Several models, one world, one shared channel. They do not eat,
+// age, sicken or die — and they work together, not against each other.
 export const AUTHORS = Object.freeze([
-  { id: 'a0', name: 'Sonnet', provider: 'perplexity', model: 'anthropic/claude-sonnet-5-5', color: '#5fa8c4' },
+  { id: 'a0', name: 'Architect', provider: 'openai', model: 'gpt-6-astra', color: '#5fa8c4', role: 'Shelter, water, and whatever keeps people alive tonight.' },
+  { id: 'a1', name: 'Engineer', provider: 'xai', model: 'grok-4.7', color: '#c9a35f', role: 'Machines, materials, and how a thing actually gets built.' },
+  { id: 'a2', name: 'Ecologist', provider: 'perplexity', model: 'openai/gpt-5.6-sol', color: '#7fae86', role: 'Food, soil, water cycles, and what lasts more than a season.' },
 ]);
 
 const NAMES_POOL = ['Ora', 'Bram', 'Lise', 'Teo', 'Nell', 'Kai', 'Juno', 'Fenn', 'Maud', 'Rook'];
@@ -42,7 +46,11 @@ export function createWorld({ seed = 2049, now = Date.now(), reserveDays = 4 } =
     births: 0, deaths: 0, storms: 0,
   };
   // They arrive with supplies: enough to think, not enough to survive on.
-  S.camp.stock.water = Math.round(RULES.waterPerPersonDay * PEOPLE.length * reserveDays);
+  // Water is sized against the temperature they land in, because a desert summer
+  // is not the same problem as a mild day.
+  advanceWeather(S.weather, 0);
+  const arrivalTemp = weatherOn(S.weather, 0).tempC;
+  S.camp.stock.water = Math.round(waterNeedL(arrivalTemp) * PEOPLE.length * reserveDays);
   S.camp.stock.food = Math.round(RULES.foodPerPersonDay * PEOPLE.length * reserveDays);
   S.camp.stock.material = 40;
   S.camp.stock.soil = 12;
@@ -55,11 +63,12 @@ export function createWorld({ seed = 2049, now = Date.now(), reserveDays = 4 } =
     starving: 0, pregnant: null, children: 0, cause: null,
   }));
   S.authors = AUTHORS.map(a => ({
-    ...a, kind: 'author', x: START.x, y: START.y - 1, alive: true,
+    ...a, kind: 'author', x: START.x - AUTHORS.indexOf(a), y: START.y - 1, alive: true,
     labor: { day: -1, used: 0 }, say: null, saidAt: -1, calls: 0, lastProgram: null,
   }));
+  S.council = [];
   S.log.push({ t: 0, kind: 'arrive', text: 'Five people arrive on bare land with four days of supplies.' });
-  advanceWeather(S.weather, 0);
+  S.log.push({ t: 0, kind: 'arrive', text: `${AUTHORS.map(a => a.name).join(', ')} agree to work on it together.` });
   return S;
 }
 
@@ -208,26 +217,39 @@ export function advance(S, minutes, { onProgram = null, run = null } = {}) {
     if (w.storm && !stormsDone.has(day) && hourOfDay(S) >= w.storm.hour) { stormsDone.add(day); resolveStorm(S, w.storm); }
 
     // Survival, minute by minute. Nobody is exempt.
-    const needW = RULES.waterPerPersonDay / MINUTES_PER_DAY;
+    // Water is the fast killer and food the slow one, which is what the evidence
+    // says: about three days against about six weeks.
+    const needW = waterNeedL(w.tempC) / MINUTES_PER_DAY;
     const needF = RULES.foodPerPersonDay / MINUTES_PER_DAY;
+    const perDayNoWater = 100 / RULES.daysToDieWithoutWater;
+    const perDayNoFood = 100 / RULES.daysToDieWithoutFood;
     for (const p of living(S)) {
       const store = atCamp(S, p) ? S.camp.stock : p.pack;
       const gotW = Math.min(store.water || 0, needW);
       const gotF = Math.min(store.food || 0, needF);
       store.water = Math.max(0, (store.water || 0) - gotW);
       store.food = Math.max(0, (store.food || 0) - gotF);
-      const shortfall = (needW - gotW) / needW + (needF - gotF) / needF;
-      if (shortfall > 0) {
-        p.starving = Math.min(1, p.starving + shortfall / MINUTES_PER_DAY);
-        p.health = Math.max(0, p.health - (RULES.healthPerDayUnmet / MINUTES_PER_DAY) * shortfall);
-        if (p.health <= 0) kill(S, p, shortfall > 1.4 ? 'thirst' : 'hunger');
+      const lackW = needW > 0 ? (needW - gotW) / needW : 0;
+      const lackF = needF > 0 ? (needF - gotF) / needF : 0;
+      if (lackW > 0 || lackF > 0) {
+        p.thirst = Math.min(1, (p.thirst || 0) + lackW / MINUTES_PER_DAY);
+        p.starving = Math.min(1, p.starving + lackF / MINUTES_PER_DAY);
+        const perMinute = Math.min(
+          RULES.maxHealthLossPerDay / MINUTES_PER_DAY,
+          ((lackW * perDayNoWater) + (lackF * perDayNoFood)) * fragility(p.age) / MINUTES_PER_DAY,
+        );
+        p.health = Math.max(0, p.health - perMinute);
+        if (p.health <= 0) kill(S, p, lackW >= lackF ? 'thirst' : 'hunger');
       } else {
+        p.thirst = Math.max(0, (p.thirst || 0) - 1 / MINUTES_PER_DAY);
         p.starving = Math.max(0, p.starving - 1 / MINUTES_PER_DAY);
-        // Recovery needs food, water and a roof over a body that is not worn out.
-        const sheltered = shelterAt(S, p.x, p.y) > 0;
-        p.health = Math.min(100, p.health + ((sheltered ? 0.9 : 0.5) / MINUTES_PER_DAY));
+        // Recovery is slow: weeks, not days, and better under a roof.
+        p.health = Math.min(100, p.health + ((shelterAt(S, p.x, p.y) > 0 ? 4 : 2.5) / MINUTES_PER_DAY));
       }
     }
+
+    // The people look after themselves: water, food, and a roof in a storm.
+    if (S.minute % INSTINCT_MINUTES === 0) runInstincts(S);
   }
   return S;
 }
@@ -259,9 +281,10 @@ export function summarise(S) {
     alive: alive.length,
     dead: S.deaths,
     born: S.births,
-    reserveWaterDays: +(S.camp.stock.water / (RULES.waterPerPersonDay * Math.max(1, alive.length))).toFixed(1),
+    reserveWaterDays: +(S.camp.stock.water / (waterNeedL(weatherOn(S.weather, dayIndex(S)).tempC) * Math.max(1, alive.length))).toFixed(1),
     reserveFoodDays: +(S.camp.stock.food / (RULES.foodPerPersonDay * Math.max(1, alive.length))).toFixed(1),
     meanHealth: alive.length ? Math.round(alive.reduce((t, p) => t + p.health, 0) / alive.length) : 0,
+    thirst: alive.length ? +(alive.reduce((t, p) => t + (p.thirst || 0), 0) / alive.length).toFixed(2) : 0,
     shelter: shelterCount(S),
     structures: S.structures.length,
     storms: S.storms,

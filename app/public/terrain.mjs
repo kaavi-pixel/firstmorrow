@@ -98,12 +98,18 @@ export function createTerrain(seed = 2049) {
     if (t) { t.regionId = 'scrub'; t.water = 190; t.potable = 180; t.soil = 14; t.material = 6; }
   }
 
+  // Every tile that can be drunk from at the start. The list of places is fixed;
+  // what is left in them is not.
+  const springs = [];
+  for (const t of tiles.values()) if (t.potable > 0) springs.push({ x: t.x, y: t.y });
+
   return {
     version: GEO_VERSION, seed, tileM: TILE_M,
     bounds: BOUNDS,
     mainland: BOUNDS,
     regions: REGIONS.map(r => ({ id: r.id, name: r.name, color: r.color })),
     features,
+    springs,
     oasis: { ...OASIS },
     tiles,
   };
