@@ -185,7 +185,7 @@ function build(S, p, site, asleep) {
   const atSite = Math.abs(site.x - p.x) + Math.abs(site.y - p.y) <= 1;
   if (!atSite) {
     if (asleep) return false;
-    p.activity = 'build';
+    // Walking there is walking; only standing at the site is building.
     stepToward(S, p, { x: site.x, y: site.y });
     return true;
   }
@@ -293,6 +293,11 @@ function act(S, p, w, hour) {
     if (p.pack.food > 2 * RULES.foodPerPersonDay) {
       p.goal = { kind: 'home' }; p.activity = 'carry'; stepToward(S, p, S.camp); return;
     }
+    // A structure the authors designed, still unfinished, is work they can walk
+    // to. Water and food first, then the site: a person away from camp who has
+    // both is not idle, they are on their way to build.
+    const buildingSite = unfinishedNear(S, p);
+    if (buildingSite && build(S, p, buildingSite, asleep)) return;
     // Nothing to do out here. Somewhere else is better than here, and home is
     // where the water is.
     p.activity = asleep ? 'sleep' : 'carry';

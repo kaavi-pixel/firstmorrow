@@ -139,17 +139,30 @@ export function createService({
     }
   }
 
-  /** One author turn, if the interval and the daily budget allow it. */
-  async function maybeAuthorTurn() {
+  /**
+   * Author turns, if the interval and the daily budget allow them.
+   *
+   * One beat, one turn, is only enough when someone is watching the world once a
+   * minute. A cron may come once an hour, or once a day, and the world will have
+   * moved a long way in between, so a beat takes up to `max` turns: one per
+   * author in the round, stopping the moment the day's budget is spent.
+   */
+  async function maybeAuthorTurn({ max = 1 } = {}) {
     if (!caller) return { status: 'off' };
     const S = await read();
     const t = now();
     if (t - (S.lastTurnAt || 0) < authorIntervalMs) return { status: 'waiting' };
     S.lastTurnAt = t;
     const { authorTurn } = await import('./authors.mjs');
-    const result = await authorTurn(S, { call: caller, now: t });
-    await tick();                       // commit the turn and any time that passed
-    return result;
+    const turns = [];
+    for (let i = 0; i < Math.max(1, max); i++) {
+      const turn = await authorTurn(S, { call: caller, now: t });
+      turns.push(turn);
+      // Nothing left to spend, or nothing left to reach: the rest of the round waits.
+      if (turn.status === 'budget' || turn.status === 'error' || turn.status === 'off') break;
+    }
+    await tick();                       // commit the turns and any time that passed
+    return turns.length === 1 ? turns[0] : { ...turns[turns.length - 1], turns };
   }
 
   return {

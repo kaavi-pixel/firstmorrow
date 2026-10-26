@@ -12,10 +12,36 @@ cd app
 npm install
 npm test
 PORT=3000 node server.mjs      # http://localhost:3000
+npm run loop                   # the heartbeat: beats every 5s
+npm run loop -- --once         # a single beat
 ```
 
 One real second is one simulation minute. The world starts bare: five people, four days
 of supplies, no structures, no authored code. Left alone, they starve. That is the point.
+
+## The author loop
+
+Three models (the Architect, the Engineer, the Ecologist) take turns designing structures.
+A turn is: the kernel builds a brief from what that author has surveyed, the model answers
+with one JSON object, the gate accepts it or refuses it, and on acceptance the people have
+to build it by hand before its program runs once a day, forever.
+
+| Piece | Where |
+|---|---|
+| The turn, the brief, the daily budget | `kernel/authors.mjs` |
+| The vendor call, with a timeout and one retry | `kernel/provider.mjs` |
+| The beat: advance the world, then let the authors work | `kernel/store.mjs` `maybeAuthorTurn` |
+| The beat in production | a Vercel cron on `/api/tick`, `turns=3` |
+| The beat anywhere else | `npm run loop`, or any scheduler on `/api/tick` |
+
+The day's budget is 24 model calls, shared out evenly, and it is a hard cap: a model call
+that fails still spends it. A refusal is remembered and handed back to that author on their
+next turn. Keys come from `PPLX_API_KEY` / `OPENAI_API_KEY` / `XAI_API_KEY`; with none set
+the world runs and nobody thinks, which is said out loud rather than faked.
+
+One beat carries a turn for every author, because the next beat may be an hour away. Beat
+more often than every 24 minutes and the world runs at its stated pace; beat less often and
+the catch-up is capped at a single simulation day per beat.
 
 ## Layout
 
@@ -32,6 +58,8 @@ of supplies, no structures, no authored code. Left alone, they starve. That is t
 | `kernel/sandbox.mjs` | QuickJS with hard caps: 500 ms, 32 MB, 8 kB, no host. | **reality** |
 | `kernel/capability.mjs` | What an author may know, and the written boundary it works inside. | **reality** |
 | `kernel/payload.mjs` | What the browser (an observer) may see. | **reality** |
+| `kernel/authors.mjs`, `provider.mjs` | The loop: the brief, the turn, the budget, the vendor call. | ours |
+| `kernel/store.mjs`, `api/index.js`, `run-loop.mjs` | The world record, the Vercel entry, the heartbeat. | ours |
 
 Nothing under `kernel/` is authored by a model, and nothing in it may be changed by one.
 
@@ -61,11 +89,11 @@ day, forever.
 
 ## What still has to be built
 
-- **The author loop.** `kernel/world.mjs` exposes the `onProgram` hook; wiring it to real model
-  calls (and the daily budget) is not done. Today no code is authored at all, so the world is a
-  demonstration of the pressure rather than of the response.
-- **Persistence.** `kernel/store.mjs` is memory-only. Production needs the Redis token-checked
-  atomic commit — port the v1 `COMMIT_SCRIPT` pattern, do not reinvent it.
+- **Persistence is done** (`kernel/store.mjs` + `api/index.js`, Upstash Redis with the v1
+  token-checked commit), and **the author loop runs** (`kernel/authors.mjs`, the Vercel cron on
+  `/api/tick`). What is open is the pacing: with nothing watching, the world moves at one
+  simulation day per beat, and the beat is hourly.
 - **People's inner lives.** Instinct handles water, food and shelter. Whether they get
   model-driven personas on top of that is open in the charter.
 - **Islands and boats.** `../design/islands-and-boats.md` is kept as the plan.
+

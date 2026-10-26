@@ -155,6 +155,8 @@ export async function runAuthorTurn(S, author, { call }) {
     S.log.push({ t: S.minute, kind: 'reject', text: `${author.name} answered unusably: ${e.message}` });
     return { status: 'unusable', author: author.name, detail: e.message };
   }
+  // The note about the last refusal has been delivered; they have answered.
+  author.lastRejection = null;
 
   if (reply.think) {
     author.thought = reply.think;

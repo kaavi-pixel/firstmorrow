@@ -46,8 +46,12 @@ export default async function handler(req, res) {
   if (url.pathname === '/api/live' || url.pathname === '/api/tick' || url.pathname === '/api/health') {
     try {
       const { state, advanced, skipped } = await service.tick();
-      // Answer first; let the authors work afterwards.
-      waitUntil(service.maybeAuthorTurn().catch(() => {}));
+      // Answer first; let the authors work afterwards. A beat carries a turn for
+      // every author, because the next beat may be an hour away. A reader who is
+      // just watching the world gets the one turn the hourly interval allows.
+      const beat = url.pathname === '/api/tick';
+      const turns = Math.max(1, Math.min(8, Number(url.searchParams.get('turns') || (beat ? 3 : 1))));
+      waitUntil(service.maybeAuthorTurn({ max: turns }).catch(() => {}));
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
       res.setHeader('cache-control', 'no-store');

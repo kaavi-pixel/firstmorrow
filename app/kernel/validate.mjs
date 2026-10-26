@@ -225,6 +225,9 @@ export function applyDeclarations(S, person, decl) {
     const d = decl.propose || {};
     const x = d.x, y = d.y;
     const isAuthor = person.kind === 'author';
+    // A structure belongs to whoever designed it. An author designs; a person
+    // only carries out what an author thought of, and owns nothing.
+    const ownerOf = who => (who.kind === 'author' ? who.id : who.authorId ?? null);
     if (!Number.isInteger(x) || !Number.isInteger(y)) throw new Error('propose needs integer x and y.');
     // A person has to be at the site. An author has no body: it may direct work
     // anywhere it has surveyed, and the material is drawn from camp by the people.
@@ -270,9 +273,11 @@ export function applyDeclarations(S, person, decl) {
     S.structures.push({
       id, x, y, name, sprite, mass: d.mass, shelter, program,
       laborHours: Math.round(d.mass * RULES.buildHoursPerKg * 10) / 10,
-      progressHours: 0, built: false, authorId: person.authorId ?? null, startedAt: S.minute,
+      progressHours: 0, built: false, authorId: ownerOf(person), startedAt: S.minute,
     });
-    S.log.push({ t: S.minute, kind: 'plan', text: `${person.name} began ${name} (${d.mass} kg).` });
+    S.log.push({ t: S.minute, kind: 'plan', text: isAuthor
+      ? `${person.name} designed ${name} (${d.mass} kg) at ${x}.${y}.`
+      : `${person.name} began ${name} (${d.mass} kg).` });
     applied.push('propose');
   }
 
