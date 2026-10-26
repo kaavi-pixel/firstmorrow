@@ -31,7 +31,7 @@ to build it by hand before its program runs once a day, forever.
 | The turn, the brief, the daily budget | `kernel/authors.mjs` |
 | The vendor call, with a timeout and one retry | `kernel/provider.mjs` |
 | The beat: advance the world, then let the authors work | `kernel/store.mjs` `maybeAuthorTurn` |
-| The beat in production | a Vercel cron on `/api/tick`, `turns=3` |
+| The beat in production | a Vercel cron on `/api/tick`, `turns=3`, daily |
 | The beat anywhere else | `npm run loop`, or any scheduler on `/api/tick` |
 
 The day's budget is 24 model calls, shared out evenly, and it is a hard cap: a model call
@@ -39,9 +39,10 @@ that fails still spends it. A refusal is remembered and handed back to that auth
 next turn. Keys come from `PPLX_API_KEY` / `OPENAI_API_KEY` / `XAI_API_KEY`; with none set
 the world runs and nobody thinks, which is said out loud rather than faked.
 
-One beat carries a turn for every author, because the next beat may be an hour away. Beat
-more often than every 24 minutes and the world runs at its stated pace; beat less often and
-the catch-up is capped at a single simulation day per beat.
+One beat carries a turn for every author, because the next beat may be a day away. The world
+runs at its stated pace when someone is watching it, which ticks it; a daily cron keeps it
+alive when nobody is. A tighter beat needs a Pro plan, or any external scheduler pointed at
+`/api/tick`.
 
 ## Layout
 
