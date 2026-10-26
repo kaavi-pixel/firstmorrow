@@ -34,9 +34,10 @@ Start with [`CHARTER.md`](CHARTER.md), then [`app/README.md`](app/README.md).
 ```sh
 cd app
 npm install
-npm test          # 25 tests: reality bites, the gate refuses, the sandbox holds
+npm test          # 41 tests: reality bites, the gate refuses, the sandbox holds
 PORT=3000 node server.mjs
 ```
 
-Left alone with no authored code, the five people run out of supplies on day four and are
-dead by day seven. That is the starting condition, not a bug.
+Left alone with no authored code, the five people look after their own water, eat through their
+supplies in four days, weaken for a month, and are all dead by around day 44 — the real starvation
+window, not a made-up one. That is the starting condition, not a bug.
