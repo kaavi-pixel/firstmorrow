@@ -128,6 +128,43 @@ function drink(S, p) {
 
 const outFetching = S => S.people.filter(q => q.alive && q.goal && q.goal.kind === 'water').length;
 
+const unfinishedNear = (S, p) => {
+  let best = null, bestD = Infinity;
+  for (const s of S.structures) {
+    if (s.built) continue;
+    const d = Math.abs(s.x - p.x) + Math.abs(s.y - p.y);
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  return best;
+};
+
+/**
+ * Work on a structure that is not finished yet. This is the only way anything the
+ * authors design ever comes into being: they write it, the people build it by hand,
+ * and it takes as long as the mass says it takes.
+ */
+function build(S, p, site, asleep) {
+  const remaining = site.laborHours - site.progressHours;
+  if (remaining <= 0) { site.built = true; return false; }
+  const atSite = Math.abs(site.x - p.x) + Math.abs(site.y - p.y) <= 1;
+  if (!atSite) {
+    if (asleep) return false;
+    p.activity = 'build';
+    stepToward(S, p, { x: site.x, y: site.y });
+    return true;
+  }
+  const hours = Math.min(INSTINCT_MINUTES / 60, Math.max(0, RULES.laborHoursPerDay - (p.labor?.used ?? 0)), remaining);
+  if (hours <= 0) { p.activity = 'idle'; return true; }
+  p.labor.used = (p.labor?.used ?? 0) + hours;
+  site.progressHours += hours;
+  p.activity = 'build';
+  if (site.progressHours >= site.laborHours) {
+    site.built = true;
+    S.log.push({ t: S.minute, kind: 'built', text: `${site.name} is finished. ${site.laborHours} person-hours went into it.` });
+  }
+  return true;
+}
+
 /** One person's turn. Their own judgement, such as it is. */
 function act(S, p, w, hour) {
   const need = waterNeedL(w.tempC);
@@ -215,6 +252,10 @@ function act(S, p, w, hour) {
     const want = Math.min(2 * RULES.foodPerPersonDay, S.camp.stock.food, Math.max(0, RULES.carryKg * RULES.foodKcalPerKg - packMass(p)));
     if (want > 0) { S.camp.stock.food -= want; p.pack.food += want; p.activity = 'eat'; return; }
   }
+
+  // Nothing urgent. Somebody designed something and it is not standing yet.
+  const site = unfinishedNear(S, p);
+  if (site && build(S, p, site, asleep)) return;
 
   p.resting = asleep;
   p.activity = asleep ? 'sleep' : 'idle';

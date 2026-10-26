@@ -32,6 +32,27 @@ export function rulesBrief() {
   ].join('\n');
 }
 
+/** What a structure's own code is allowed to see when it runs. */
+export function structureEnv(S, s) {
+  const day = dayIndex(S);
+  const w = weatherOn(S.weather, day);
+  const t = terrainAt(S.terrain, s.x, s.y);
+  return {
+    day,
+    time: { hour: +hourOfDay(S).toFixed(1), season: w.season, tempC: w.tempC, stormToday: !!w.storm, stormSeverity: w.storm?.severity ?? 0 },
+    structure: { id: s.id, name: s.name, x: s.x, y: s.y, shelter: s.shelter || 0 },
+    here: { x: s.x, y: s.y, region: t?.regionId, water: t?.potable || 0, soil: t?.soil || 0, material: t?.material || 0 },
+    camp: {
+      stock: { ...S.camp.stock },
+      people: living(S).map(p => ({
+        name: p.name, age: Math.floor(p.age), health: Math.round(p.health),
+        thirst: +(p.thirst || 0).toFixed(2), starving: +(p.starving || 0).toFixed(2),
+      })),
+      shelterPlaces: shelterCount(S),
+    },
+  };
+}
+
 export function authorView(S, authorId) {
   const a = S.authors.find(x => x.id === authorId);
   if (!a) return null;

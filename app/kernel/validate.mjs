@@ -219,10 +219,16 @@ export function applyDeclarations(S, person, decl) {
   if (decl.propose !== undefined) {
     const d = decl.propose || {};
     const x = d.x, y = d.y;
+    const isAuthor = person.kind === 'author';
     if (!Number.isInteger(x) || !Number.isInteger(y)) throw new Error('propose needs integer x and y.');
-    if (Math.abs(x - person.x) + Math.abs(y - person.y) > 1) throw new Error('They must stand on or beside the site.');
+    // A person has to be at the site. An author has no body: it may direct work
+    // anywhere it has surveyed, and the material is drawn from camp by the people.
+    if (!isAuthor && Math.abs(x - person.x) + Math.abs(y - person.y) > 1) throw new Error('They must stand on or beside the site.');
+    if (isAuthor && Math.abs(x - S.camp.x) + Math.abs(y - S.camp.y) > 16) throw new Error('That is beyond what they have surveyed.');
     if (!Number.isInteger(d.mass) || d.mass <= 0 || d.mass > 400) throw new Error('propose.mass must be 1–400 kg.');
     if (S.structures.some(s => s.x === x && s.y === y)) throw new Error('Something is already standing there.');
+    // Labour is the scarce thing: two half-built sites is all five people can carry.
+    if (S.structures.filter(s => !s.built).length >= 2) throw new Error('Two things are already half-built. Finish one first.');
     if (x === S.camp.x && y === S.camp.y) throw new Error('The camp tile has to stay clear.');
     if (!walkable(S.terrain, x, y)) throw new Error('That tile cannot be built on.');
     const name = String(d.name || 'structure').slice(0, 40);
@@ -251,7 +257,9 @@ export function applyDeclarations(S, person, decl) {
 
     // The material has to exist, and it is hauled to the site now.
     const need = { material: d.mass };
-    const source = massOf(person.pack) >= d.mass ? person.pack : (atCamp ? S.camp.stock : person.pack);
+    const source = isAuthor
+      ? S.camp.stock
+      : (massOf(person.pack) >= d.mass ? person.pack : (packedAtCamp(S, person) ? S.camp.stock : person.pack));
     takeFrom(source, need, 'building');
     const id = `s${(S.structures.length + 1).toString().padStart(2, '0')}-${x}.${y}`;
     S.structures.push({

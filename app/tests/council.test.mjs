@@ -4,12 +4,16 @@ import assert from 'node:assert/strict';
 import { createWorld, AUTHORS, advance } from '../kernel/world.mjs';
 import { authorView, rulesBrief } from '../kernel/capability.mjs';
 import { applyDeclarations, RULES } from '../kernel/validate.mjs';
+import { PROVIDERS } from '../kernel/provider.mjs';
 
 test('there is more than one author, and they are different models', () => {
   const S = createWorld();
   assert.ok(S.authors.length >= 3, `${S.authors.length} authors`);
   assert.equal(new Set(S.authors.map(a => a.model)).size, S.authors.length, 'each is a distinct model');
-  assert.equal(new Set(S.authors.map(a => a.provider)).size, S.authors.length, 'from distinct providers');
+  // Production carries one provider key (Perplexity), so the council is three
+  // models behind that key rather than three vendors. What matters is that they
+  // are genuinely different models, each with its own role, sharing one channel.
+  assert.ok(S.authors.every(a => PROVIDERS[a.provider]), 'every author uses a supported provider');
   assert.ok(AUTHORS.every(a => a.role), 'each has a role to work on');
 });
 

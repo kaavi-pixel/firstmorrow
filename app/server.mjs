@@ -1,5 +1,6 @@
 // Development server. Serves the shell and the live world.
-// The world advances in real time: one real second is one simulation minute.
+// One real second is one simulation minute. Authors are optional here: with no
+// key, no model is ever called and the world simply runs and kills people.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -7,25 +8,47 @@ import { fileURLToPath } from 'node:url';
 import { createWorld } from './kernel/world.mjs';
 import { createService, memoryStore } from './kernel/store.mjs';
 import { livePayload } from './kernel/payload.mjs';
+import { createCaller } from './kernel/provider.mjs';
+import { structureEnv } from './kernel/capability.mjs';
+import { runProgram } from './kernel/sandbox.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(here, 'public');
 const PORT = Number(process.env.PORT || 3000);
+const SEED = Number(process.env.FM_SEED || 2049);
 
-const service = createService({ store: memoryStore(), build: () => createWorld({ seed: Number(process.env.FM_SEED || 2049) }) });
+const caller = process.env.PPLX_API_KEY
+  ? createCaller({
+    keys: {
+      perplexity: process.env.PPLX_API_KEY,
+      openai: process.env.OPENAI_API_KEY,
+      xai: process.env.XAI_API_KEY,
+    },
+  })
+  : null;
+
+const service = createService({
+  store: memoryStore(),
+  build: () => createWorld({ seed: SEED }),
+  caller,
+  run: (code, s, S) => runProgram(code, structureEnv(S, s), SEED),
+});
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
-    if (url.pathname === '/api/live') {
-      const S = await service.tick();
+    if (url.pathname === '/api/live' || url.pathname === '/api/tick') {
+      const { state } = await service.tick();
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      return res.end(JSON.stringify(livePayload(S)));
+      res.end(JSON.stringify(livePayload(state)));
+      // The authors get their turn after the visitor has their answer.
+      service.maybeAuthorTurn().catch(() => {});
+      return;
     }
     if (url.pathname === '/api/reset') {
-      await service.reset?.();
+      await service.reset();
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ ok: true }));
     }
@@ -41,4 +64,4 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`Firstmorrow v2 on http://localhost:${PORT} — bare world, real risk, no authored code yet.`));
+server.listen(PORT, () => console.log(`Firstmorrow v2 on http://localhost:${PORT} — authors ${caller ? 'enabled' : 'disabled (no key)'}.`));

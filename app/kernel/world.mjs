@@ -8,6 +8,7 @@ import { createTerrain, terrainAt, region, START, OASIS } from '../public/terrai
 import { RULES, massOf, applyDeclarations, waterNeedL, fragility } from './validate.mjs';
 import { createWeather, advanceWeather, weatherOn, stormEffect, WEATHER } from './weather.mjs';
 import { runInstincts, INSTINCT_MINUTES } from './instinct.mjs';
+import { DEFAULT_ROSTER, rosterFromEnv } from './roster.mjs';
 
 export const MINUTES_PER_DAY = 1440;
 export const dayIndex = S => Math.floor(S.minute / MINUTES_PER_DAY);
@@ -25,11 +26,7 @@ export const PEOPLE = Object.freeze([
 
 // The authors. Several models, one world, one shared channel. They do not eat,
 // age, sicken or die — and they work together, not against each other.
-export const AUTHORS = Object.freeze([
-  { id: 'a0', name: 'Architect', provider: 'openai', model: 'gpt-6-astra', color: '#5fa8c4', role: 'Shelter, water, and whatever keeps people alive tonight.' },
-  { id: 'a1', name: 'Engineer', provider: 'xai', model: 'grok-4.7', color: '#c9a35f', role: 'Machines, materials, and how a thing actually gets built.' },
-  { id: 'a2', name: 'Ecologist', provider: 'perplexity', model: 'openai/gpt-5.6-sol', color: '#7fae86', role: 'Food, soil, water cycles, and what lasts more than a season.' },
-]);
+export const AUTHORS = DEFAULT_ROSTER;
 
 const NAMES_POOL = ['Ora', 'Bram', 'Lise', 'Teo', 'Nell', 'Kai', 'Juno', 'Fenn', 'Maud', 'Rook'];
 const HAIR = ['#574130', '#303a35', '#574638', '#4c3529', '#424443', '#6b5240'];
@@ -266,7 +263,9 @@ export function runStructures(S, day, { run = null } = {}) {
     });
     actor.labor = { day, used: RULES.laborHoursPerDay };
     try {
-      const decl = run(s.program, { day, structure: { id: s.id, name: s.name, x: s.x, y: s.y, shelter: s.shelter } });
+      // The caller builds the environment: the world does not need to know how a
+      // structure is allowed to see itself.
+      const decl = run(s.program, s, S);
       applyDeclarations(S, actor, decl);
     } catch (e) {
       S.log.push({ t: S.minute, kind: 'reject', text: `${s.name} failed: ${e.message}` });
