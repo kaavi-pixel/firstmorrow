@@ -74,6 +74,31 @@ function nearestWater(S, p) {
   return best;
 }
 
+/** The nearest standing structure with water in it. What an author's process
+ *  makes is the one thing a person can drink that nobody gathered, so somebody
+ *  has to be able to find it and put their mouth to it. */
+function nearestWaterStore(S, p) {
+  let best = null, bestD = Infinity;
+  for (const s of S.structures) {
+    if (!s.built || !s.store || !(s.store.water > 0)) continue;
+    const d = Math.abs(s.x - p.x) + Math.abs(s.y - p.y);
+    if (d > RULES.reachTiles || d >= bestD) continue;
+    bestD = d; best = s;
+  }
+  return best;
+}
+
+/** Fill up from a structure's store instead of from the ground underfoot. */
+function tapStore(S, p, s, want) {
+  const room = Math.max(0, RULES.carryKg - packMass(p));
+  const got = Math.min(s.store.water, room, want);
+  if (got <= 0.01) return false;
+  s.store.water -= got;
+  p.pack.water += got;
+  p.activity = 'drink';
+  return true;
+}
+
 /** The nearest tile with anything worth eating on it. A person will walk for food,
  *  and when they are starving they will walk much further than they like to. */
 function nearestForage(S, p, radius = RULES.reachTiles) {
@@ -323,9 +348,16 @@ function act(S, p, w, hour) {
   // No errand is worth dying on. Anyone away from camp who is running dry drops
   // what they were doing and goes to water, whatever they had set out to fetch.
   if (!home && p.pack.water < need * 0.6 && !(p.goal && p.goal.kind === 'water')) {
-    // The nearest spring, or the camp butt if there is no spring in reach: either
-    // one is water, and the errand can wait for a living person.
-    const water = nearestWater(S, p) || (S.camp.stock.water > 0 ? S.camp : null);
+    // The nearest spring, a standing structure that holds water, or the camp
+    // butt: any of the three is water, and the errand can wait for a living
+    // person. Nearest wins, so a still built out by the coast is walked to
+    // rather than passed by on the way to a spring.
+    const spring = nearestWater(S, p);
+    const tap = nearestWaterStore(S, p);
+    const nearer = (a, b) => (a && b
+      ? (Math.abs(a.x - p.x) + Math.abs(a.y - p.y) <= Math.abs(b.x - p.x) + Math.abs(b.y - p.y) ? a : b)
+      : a || b);
+    const water = nearer(spring, tap) || (S.camp.stock.water > 0 ? S.camp : null);
     if (water) { p.goal = { kind: 'water', at: water }; p.activity = 'fetch'; stepToward(S, p, water); return; }
   }
 
@@ -336,8 +368,9 @@ function act(S, p, w, hour) {
     // itself may be taken and a pool does not fit one pair of feet.
     const there = Math.abs(p.x - at.x) <= 1 && Math.abs(p.y - at.y) <= 1;
     if (there) {
-      const took = drink(S, p);
-      const more = reachable(S, p, t => t.potable > 0);
+      const fromStore = !!(at.store && at.store.water > 0);
+      const took = fromStore ? tapStore(S, p, at, 4 * RULES.waterDrinkLDay) : drink(S, p);
+      const more = fromStore ? at.store.water > 0.01 : reachable(S, p, t => t.potable > 0);
       if (!took || p.pack.water >= keep || !more) p.goal = { kind: 'home' };
       return;
     }

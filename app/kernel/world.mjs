@@ -252,9 +252,21 @@ export function advance(S, minutes, { onProgram = null, run = null } = {}) {
       // else would have to carry their own water to survive standing at home.
       const nearStore = Math.abs(p.x - S.camp.x) <= 1 && Math.abs(p.y - S.camp.y) <= 1;
       const store = nearStore ? S.camp.stock : p.pack;
-      const gotW = Math.min(store.water || 0, needW);
-      const gotF = Math.min(store.food || 0, needF);
+      // Water an author's structure made counts as water at home: a still built
+      // beside the camp is drunk from, or the camp would die of thirst next to a
+      // full butt it could not reach. Food is still the camp's own.
+      const tap = nearStore
+        ? S.structures.find(s => s.built && s.store && s.store.water > 0 &&
+            Math.abs(s.x - p.x) + Math.abs(s.y - p.y) <= 1)
+        : null;
+      let gotW = Math.min(store.water || 0, needW);
       store.water = Math.max(0, (store.water || 0) - gotW);
+      if (tap && gotW < needW) {
+        const more = Math.min(tap.store.water, needW - gotW);
+        tap.store.water -= more;
+        gotW += more;
+      }
+      const gotF = Math.min(store.food || 0, needF);
       store.food = Math.max(0, (store.food || 0) - gotF);
       const lackW = needW > 0 ? (needW - gotW) / needW : 0;
       const lackF = needF > 0 ? (needF - gotF) / needF : 0;
@@ -294,7 +306,12 @@ export function runStructures(S, day, { run = null } = {}) {
       alive: true, health: 100, pack: { water: 0, food: 0, material: 0, soil: 0 },
       labor: { day, used: 0 }, authorId: s.authorId, say: null,
     });
-    actor.labor = { day, used: RULES.laborHoursPerDay };
+    // A standing structure gets its own day's labour. It used to be handed a
+    // day already spent (`used: RULES.laborHoursPerDay`), which made hoursLeft
+    // zero and `make` impossible for every structure in the world, for ever:
+    // the live still failed at every dawn and never made a litre.
+    actor.labor = { day, used: 0 };
+    const clock = S.minute;
     try {
       // The caller builds the environment: the world does not need to know how a
       // structure is allowed to see itself.
@@ -303,6 +320,12 @@ export function runStructures(S, day, { run = null } = {}) {
     } catch (e) {
       S.log.push({ t: S.minute, kind: 'reject', text: `${s.name} failed: ${e.message}` });
       s.failures = (s.failures || 0) + 1;
+    } finally {
+      // The process runs once a day and does not spend the camp's daylight: the
+      // declared hours bound what it may make, they are not hours off the
+      // people's clock. Without this the world would gain eight simulated hours
+      // per structure per day and the seasons would slip.
+      S.minute = clock;
     }
   }
 }

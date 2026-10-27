@@ -24,6 +24,8 @@ export function rulesBrief() {
     `Water is the fast killer: without it, about ${RULES.daysToDieWithoutWater} days. Food is the slow one: about ${RULES.daysToDieWithoutFood} days. Children under five and people over sixty go first.`,
     `Work: ${RULES.laborHoursPerDay} person-hours per person per day, and less for anyone weakened or starving. Construction costs ${RULES.buildHoursPerKg} person-hours per kg. You cannot shorten that by declaring it.`,
     `A finished structure you own may run a process: at most ${RULES.maxKgPerLaborHour} kg per labour hour. A garden yields ${RULES.soilToFoodKg} kg of food per kg of soil. A still beside the sea yields ${RULES.stillLitersPerLaborHour} L of fresh water per labour hour.`,
+    `A process must declare its hours: return { labor: hours, make: { ... } }. A structure holds no more of anything than its own mass, and the hours you declare bound what it may make in the day it is given.`,
+    'You may only make water in a structure that stands beside the sea, and food only out of soil you have brought to it.',
     'The land itself feeds them, a little. Scrub and coast carry edible plants a person can gather by hand, and they will walk for it when hungry. It is finite: the ground near camp is stripped bare within a season or two. Wild food buys time. It does not keep them alive.',
     `Weather is real and destructive. Storms destroy what is not built to stand: roughly ${WEATHER.stormMassPerSeverity} kg of structure per point of severity. Anyone caught in the open loses health.`,
     'The people act for themselves — they will walk to water they can see, gather food when the larder is low, drink and eat before they build, and take cover from a storm. They cannot invent, build or plan. That is your work.',

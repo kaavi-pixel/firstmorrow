@@ -75,6 +75,7 @@ export const capacity = p => Math.max(0.15, (p.health / 100) * (1 - 0.7 * Math.m
 
 const DECLARATIONS = new Set(['say', 'tell', 'rest', 'move', 'draw', 'take', 'store', 'use', 'make', 'labor', 'propose']);
 const num = v => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+const r2 = n => Math.round(n * 100) / 100;
 const amt = (o, s) => { const v = o?.[s]; return v === undefined ? 0 : (num(v) ?? NaN); };
 
 class Reject extends Error {}
@@ -213,9 +214,11 @@ export function applyDeclarations(S, person, decl) {
   // --- labour --------------------------------------------------------------
   const hoursLeft = RULES.laborHoursPerDay * capacity(person) - (person.labor?.used ?? 0);
   let hours = 0;
+  let hoursAsked = 0;
   if (decl.labor !== undefined) {
     const h = num(decl.labor);
     if (h === null) throw new Error('labor must be a number of hours.');
+    hoursAsked = h;
     hours = Math.min(h, hoursLeft, 24);
     if (hours > 0) {
       person.labor.used += hours;
@@ -296,9 +299,16 @@ export function applyDeclarations(S, person, decl) {
     for (const s of SUBSTANCES) if (Number.isNaN(out[s])) throw new Error(`make.${s} must be a number.`);
     if (massOf(out) <= 0) throw new Error('make must produce something.');
 
+    // Declaring the labour and having the hours left to spend are two different
+    // faults, and the author is told which one it is. A program that declares
+    // `labor` and is simply out of hours must never be answered with "declare
+    // labor alongside make": the live world repeated that lie at every dawn.
+    if (decl.labor === undefined) throw new Error('A process costs labour; declare labor alongside make.');
     const site = S.structures.find(s => s.built && Math.abs(s.x - person.x) + Math.abs(s.y - person.y) <= 1);
     if (!site) throw new Error('A process needs a finished structure to run in.');
-    if (hours <= 0) throw new Error('A process costs labour; declare labor alongside make.');
+    if (hours <= 0) {
+      fail(`No labour hours left today to run this process${hoursAsked > 0 ? ` (it asks for ${r2(hoursAsked)} h)` : ''}.`);
+    }
 
     const used = {};
     for (const s of SUBSTANCES) used[s] = amt(decl.use, s);
@@ -314,12 +324,18 @@ export function applyDeclarations(S, person, decl) {
     const seaInput = out.water > 0 && besideSea ? out.water : 0;
     if (massOf(out) > massOf(used) + seaInput + 1e-9) fail('A process cannot make more mass than it takes in.');
     if (out.food > 0 && out.food > used.soil * RULES.soilToFoodKg + 1e-9) fail(`A garden yields at most ${RULES.soilToFoodKg} kg of food per kg of soil.`);
+    // When the hours fell short of what the declaration asked for, name the
+    // shortage: the fault is the hours left in the day, not the declared yield.
+    // "A still yields at most 4 L per labour hour" blamed a program that was
+    // only ever short one hour of walking.
+    const shortOf = needed => (hours < needed - 1e-9
+      ? ` — ${r2(needed)} h are needed and ${r2(hours)} h are left today` : '');
     if (out.water > 0 && out.water > hours * RULES.stillLitersPerLaborHour + 1e-9) {
-      fail(`A still yields at most ${RULES.stillLitersPerLaborHour} L per labour hour.`);
+      fail(`A still yields at most ${RULES.stillLitersPerLaborHour} L per labour hour${shortOf(out.water / RULES.stillLitersPerLaborHour)}.`);
     }
 
     const total = massOf(out);
-    if (total > hours * RULES.maxKgPerLaborHour + 1e-9) fail(`A structure processes at most ${RULES.maxKgPerLaborHour} kg per labour hour.`);
+    if (total > hours * RULES.maxKgPerLaborHour + 1e-9) fail(`A structure processes at most ${RULES.maxKgPerLaborHour} kg per labour hour${shortOf(total / RULES.maxKgPerLaborHour)}.`);
 
     takeFrom(atCamp ? S.camp.stock : site.store || (site.store = { water: 0, food: 0, material: 0, soil: 0 }), used, 'process');
     const dest = site.store || (site.store = { water: 0, food: 0, material: 0, soil: 0 });

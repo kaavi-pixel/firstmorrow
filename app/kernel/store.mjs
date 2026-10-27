@@ -37,6 +37,14 @@ export function repairState(S) {
   // A world saved before wild food existed gets it once, keeping everything it
   // has already used up.
   addWildFood(S.terrain);
+  // A structure designed before the gate asked what it is for carries no
+  // description, and its card would read empty to a visitor. Backfill a plain
+  // statement of that rather than inventing a purpose for it.
+  for (const s of S.structures || []) {
+    if (typeof s.description !== 'string' || s.description.trim() === '') {
+      s.description = 'Standing before designs had to say what they are for.';
+    }
+  }
   return S;
 }
 
