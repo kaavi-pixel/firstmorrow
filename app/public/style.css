@@ -129,7 +129,8 @@ dialog p{margin-top:8px}
 .speed-box input{width:96px;accent-color:var(--accent);cursor:pointer}
 .speed-box .mono{font-size:var(--text-xs);color:var(--muted);min-width:3ch;text-align:right}
 .timeline input{width:clamp(120px,22vw,280px);accent-color:var(--accent);cursor:pointer}
-#scrub-label{min-width:64px;font-size:var(--text-xs);color:var(--muted);text-align:right}
+#scrub-label{min-width:64px;font-size:var(--text-xs);color:var(--muted);text-align:right;cursor:pointer}
+.timeline:not(.past) #scrub-label{cursor:default}
 .timeline.past #scrub-label{color:var(--text)}
 #status{cursor:default}#status.past{cursor:pointer}
 #status.past .dot{background:var(--muted)!important;box-shadow:none!important}

@@ -7,6 +7,11 @@ let payload = null, renderer = null, panel = null;
 let viewer = null;                       // who is watching: { email, canSpeed, speed }
 let speedChoice = 1;                     // the observer's own preference, honoured only if privileged
 try { speedChoice = Math.max(1, Math.min(60, Number(localStorage.getItem('fm.speed')) || 1)); } catch {}
+// The timeline in the dock: it follows the world's clock while it runs. Dragging
+// it moves only the observer's eye to another hour of the same day — the world
+// itself is untouched, and a day is still lived exactly once.
+let following = true;
+const clockOf = m => `${String(Math.floor(Math.max(0, m) / 60)).padStart(2, '0')}:${String(Math.max(0, m) % 60).padStart(2, '0')}`;
 
 function applyViewer(v) {
   viewer = v && typeof v === 'object' ? v : null;
@@ -38,7 +43,13 @@ function apply(p) {
   payload = p;
   applyViewer(p.viewer);
   view.seed = p.seed;
-  view.minute = p.minute;
+  if (following) {
+    view.minute = p.minute;
+    const scrub = $('scrub');
+    scrub.min = 0; scrub.max = 1439; scrub.step = 1;
+    scrub.value = p.minute;
+    $('scrub-label').textContent = `Live ${p.clock}`;
+  }
   if (!view.geography || view.geography.seed !== p.geography.seed) view.geography = buildGeography(p.geography);
   view.buildings = p.buildings;
   view.inhabitants = p.inhabitants;
@@ -110,6 +121,21 @@ $('speed').addEventListener('input', e => {
   speedChoice = Math.max(1, Math.min(60, Number(e.target.value) || 1));
   $('speed-label').textContent = speedChoice + '×';
   try { localStorage.setItem('fm.speed', String(speedChoice)); } catch {}
+});
+// Dragging the timeline is looking, not travelling: the view moves to that hour
+// of the day, the world does not. Tapping the label returns to the live clock.
+$('scrub').addEventListener('input', e => {
+  following = false;
+  const m = Math.max(0, Math.min(1439, Number(e.target.value) || 0));
+  view.minute = m;
+  $('scrub-label').textContent = `${clockOf(m)} · back to live`;
+  $('scrub').closest('.timeline')?.classList.add('past');
+});
+$('scrub-label').addEventListener('click', () => {
+  if (following) return;
+  following = true;
+  $('scrub').closest('.timeline')?.classList.remove('past');
+  if (payload) { view.minute = payload.minute; $('scrub').value = payload.minute; $('scrub-label').textContent = `Live ${payload.clock}`; }
 });
 $('begin').addEventListener('click', () => { $('welcome').hidden = true; try { localStorage.setItem('fm.entered', '1'); } catch {} });
 $('theme').addEventListener('click', () => {
