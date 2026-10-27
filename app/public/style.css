@@ -125,6 +125,9 @@ dialog p{margin-top:8px}
 .save-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 
 .timeline{display:flex;align-items:center;gap:10px;padding:0 8px 0 10px}
+.speed-box{display:flex;align-items:center;gap:8px;padding:0 4px}
+.speed-box input{width:96px;accent-color:var(--accent);cursor:pointer}
+.speed-box .mono{font-size:var(--text-xs);color:var(--muted);min-width:3ch;text-align:right}
 .timeline input{width:clamp(120px,22vw,280px);accent-color:var(--accent);cursor:pointer}
 #scrub-label{min-width:64px;font-size:var(--text-xs);color:var(--muted);text-align:right}
 .timeline.past #scrub-label{color:var(--text)}

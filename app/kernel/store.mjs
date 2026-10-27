@@ -111,8 +111,11 @@ export function createService({
     return cache;
   }
 
-  /** Advance the world to now and commit it. Safe to call from anywhere, often. */
-  async function tick() {
+  /** Advance the world to now and commit it. Safe to call from anywhere, often.
+   *  `speed` multiplies simulated minutes per real second for this read alone;
+   *  only a privileged caller may pass one, and the caller checks that. */
+  async function tick({ speed = 1 } = {}) {
+    const factor = Math.max(1, Number(speed) || 1);
     const token = randomUUID();
     let held = false;
     try {
@@ -123,7 +126,7 @@ export function createService({
       const S = await read();
       const t = now();
       const elapsed = Math.max(0, Math.floor((t - (S.wallClock ?? t)) / 1000));
-      const minutes = Math.min(elapsed, catchup);
+      const minutes = Math.min(elapsed * factor, catchup);
       S.wallClock = t;
       if (minutes > 0) {
         const { advance } = await import('./world.mjs');

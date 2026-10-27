@@ -4,6 +4,26 @@ import { paintSprite, paintPerson, paintAgent, createWorldRenderer } from './art
 const $ = id => document.getElementById(id);
 const view = { seed: 0, minute: 0, geography: null, buildings: [], inhabitants: [] };
 let payload = null, renderer = null, panel = null;
+let viewer = null;                       // who is watching: { email, canSpeed, speed }
+let speedChoice = 1;                     // the observer's own preference, honoured only if privileged
+try { speedChoice = Math.max(1, Math.min(60, Number(localStorage.getItem('fm.speed')) || 1)); } catch {}
+
+function applyViewer(v) {
+  viewer = v && typeof v === 'object' ? v : null;
+  const can = !!(viewer && viewer.canSpeed);
+  $('speed-box').hidden = !can;
+  if (can) { $('speed').value = speedChoice; $('speed-label').textContent = speedChoice + '×'; }
+  $('account-btn').textContent = viewer && viewer.email ? viewer.email.split('@')[0] : 'Sign in';
+  if (panel === 'account') renderAccount();
+}
+
+function renderAccount() {
+  $('account-email').textContent = viewer && viewer.email ? viewer.email : 'Not signed in';
+  $('account-buttons').innerHTML = viewer && viewer.email
+    ? '<a class="btn" href="/api/auth/signout">Sign out</a>'
+    : '<a class="btn" href="/api/auth/begin">Sign in with Google</a>';
+  $('speed-note').hidden = !(viewer && viewer.canSpeed);
+}
 
 function buildGeography(g) {
   const tiles = new Map();
@@ -16,6 +36,7 @@ function buildGeography(g) {
 
 function apply(p) {
   payload = p;
+  applyViewer(p.viewer);
   view.seed = p.seed;
   view.minute = p.minute;
   if (!view.geography || view.geography.seed !== p.geography.seed) view.geography = buildGeography(p.geography);
@@ -66,10 +87,11 @@ function openPanel(name) {
   document.querySelectorAll('[data-view]').forEach(s => { s.hidden = s.dataset.view !== panel; });
   document.querySelectorAll('[data-panel]').forEach(b => b.classList.toggle('on', b.dataset.panel === panel));
   if (!panel) return;
-  $('panel-title').textContent = { people: 'People', stock: 'World', log: 'Log', settings: 'About' }[panel];
+  $('panel-title').textContent = { people: 'People', stock: 'World', log: 'Log', settings: 'About', account: 'Account' }[panel];
   if (panel === 'people') renderPeople();
   if (panel === 'stock') renderStock();
   if (panel === 'log') renderLog();
+  if (panel === 'account') renderAccount();
 }
 
 $('assumptions-toggle').addEventListener('click', () => {
@@ -79,6 +101,16 @@ $('assumptions-toggle').addEventListener('click', () => {
 document.querySelectorAll('[data-panel]').forEach(b => b.addEventListener('click', () => openPanel(b.dataset.panel)));
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => openPanel(panel)));
 $('rotate').addEventListener('click', () => renderer && renderer.rotateBy(Math.PI / 4));
+$('account-btn').addEventListener('click', () => {
+  // Signed out: straight to Google. Signed in: the account panel.
+  if (viewer && viewer.email) openPanel('account');
+  else location.href = '/api/auth/begin';
+});
+$('speed').addEventListener('input', e => {
+  speedChoice = Math.max(1, Math.min(60, Number(e.target.value) || 1));
+  $('speed-label').textContent = speedChoice + '×';
+  try { localStorage.setItem('fm.speed', String(speedChoice)); } catch {}
+});
 $('begin').addEventListener('click', () => { $('welcome').hidden = true; try { localStorage.setItem('fm.entered', '1'); } catch {} });
 $('theme').addEventListener('click', () => {
   const el = document.documentElement;
@@ -92,7 +124,10 @@ try { $('welcome').hidden = localStorage.getItem('fm.entered') === '1'; } catch 
 
 async function poll() {
   try {
-    const res = await fetch('/api/live', { cache: 'no-store' });
+    // The speed a privileged observer asked for. The server decides whether to
+    // honour it; anyone else gets the real pace whatever this says.
+    const q = viewer && viewer.canSpeed && speedChoice > 1 ? `?speed=${speedChoice}` : '';
+    const res = await fetch('/api/live' + q, { cache: 'no-store' });
     apply(await res.json());
     if (!renderer) {
       renderer = createWorldRenderer($('world'), {
