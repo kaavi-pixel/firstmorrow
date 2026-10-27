@@ -54,6 +54,8 @@ function apply(p) {
   view.buildings = p.buildings;
   view.inhabitants = p.inhabitants;
   $('day').textContent = `Day ${p.day + 1}`;
+  $('day-bar-label').textContent = `Day ${p.day + 1}`;
+  $('day-fill').style.width = `${Math.min(100, (p.minute / 1439) * 100)}%`;
   $('time').textContent = p.clock;
   $('since').textContent = `day ${p.day + 1}`;
   $('cap-used').textContent = String(p.summary.dead);

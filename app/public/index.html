@@ -26,7 +26,9 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <nav class="dock" aria-label="Controls">
-    <div class="timeline"><label for="scrub" class="sr-only">Day</label><input id="scrub" type="range" min="0" max="0" value="0" step="1"><span id="scrub-label" class="mono">Live</span></div>
+    <div class="day-bar" title="The current day in the world"><span class="bar" aria-hidden="true"><i id="day-fill"></i></span><span id="day-bar-label" class="mono">Day 1</span></div>
+    <span class="sep"></span>
+    <div class="timeline"><label for="scrub" class="sr-only">Time of day</label><input id="scrub" type="range" min="0" max="0" value="0" step="1"><span id="scrub-label" class="mono">Live</span></div>
     <span class="sep"></span>
     <div id="speed-box" class="speed-box" hidden><span class="mono" id="speed-label">1×</span><input id="speed" type="range" min="1" max="60" step="1" value="1" aria-label="Simulation speed" title="Simulation speed"></div>
     <span class="sep"></span>
