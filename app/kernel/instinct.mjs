@@ -269,16 +269,18 @@ function gatherSubstance(S, p, key, maxKg = 6) {
 }
 
 /**
- * Not everyone keeps the same hours. Each person's night is seven hours, starting
- * somewhere between 21:00 and midnight, so the camp is never wholly asleep: there
- * is always somebody awake to fetch, build, or notice a storm turning.
+ * Not everyone keeps the same hours. Each person's night is `RULES.sleepHoursPerDay`
+ * long, starting ninety minutes apart from 21:00, so the camp is never wholly
+ * asleep: there is always somebody awake to fetch, build, or notice a storm
+ * turning. The length of that night is also what fixes the day's labour budget
+ * (see `SLEEP_HOURS_PER_DAY`): people work as long as they are awake.
  */
 function sleepWindow(S, p) {
   const i = Math.max(0, S.people.indexOf(p));
-  // Starts ninety minutes apart from 21:00, six hours each, so the night is
-  // covered end to end and the camp is never all asleep at once.
+  // Ninety minutes apart from 21:00, so the night is covered end to end and the
+  // camp is never all asleep at once.
   const start = (21 * 60 + (i % 5) * 90) % 1440;
-  const end = (start + 360) % 1440;
+  const end = (start + RULES.sleepHoursPerDay * 60) % 1440;
   const m = S.minute % 1440;
   return end > start ? (m >= start && m < end) : (m >= start || m < end);
 }

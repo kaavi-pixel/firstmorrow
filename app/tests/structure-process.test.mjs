@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, runStructures, dayIndex, advance, living, MINUTES_PER_DAY } from '../kernel/world.mjs';
-import { applyDeclarations } from '../kernel/validate.mjs';
+import { applyDeclarations, RULES } from '../kernel/validate.mjs';
 import { runProgram } from '../kernel/sandbox.mjs';
 import { structureEnv } from '../kernel/capability.mjs';
 import { terrainAt, walkable, BOUNDS } from '../public/terrain.mjs';
@@ -62,7 +62,9 @@ test('a process whose person is out of hours is told the hours, not the declarat
   const { x, y } = besideSea(S);
   standing(S, { x, y, program: 'return { labor: 8, make: { water: 8 } };' });
   const p = operator(S, x, y);
-  p.labor = { day: dayIndex(S), used: 8 };
+  // A whole day already spent. The budget is the waking day, so it is taken from
+  // the rule rather than written as a number that would drift from it.
+  p.labor = { day: dayIndex(S), used: RULES.laborHoursPerDay };
   // Labour WAS declared. Saying otherwise sent the live author round this loop
   // nineteen days running.
   assert.throws(() => applyDeclarations(S, p, { labor: 8, make: { water: 8 } }),
@@ -74,7 +76,7 @@ test('a process short of hours is told the shortfall, not that its yield is wron
   const { x, y } = besideSea(S);
   standing(S, { x, y, program: 'return { labor: 8, make: { water: 32 } };' });
   const p = operator(S, x, y);
-  p.labor = { day: dayIndex(S), used: 0.5 };   // seven and a half hours left
+  p.labor = { day: dayIndex(S), used: RULES.laborHoursPerDay - 7.5 };   // seven and a half hours left
   assert.throws(() => applyDeclarations(S, p, { labor: 8, make: { water: 32 } }),
     /8 h are needed and 7\.5 h are left today/,
     'the hour is the shortage: 32 L at 4 L/h needs eight of them');
@@ -97,7 +99,7 @@ test('a structure that asks for more hours than its day has is refused, and says
   const s = standing(S, { x, y, program: 'return { labor: 8, make: { water: 32 } };' });
   // Seven and a half hours: enough to be told the truth, not enough to fill it.
   const p = operator(S, x, y);
-  p.labor = { day: dayIndex(S), used: 0.5 };
+  p.labor = { day: dayIndex(S), used: RULES.laborHoursPerDay - 7.5 };
   assert.throws(() => applyDeclarations(S, p, { labor: 8, make: { water: 32 } }), /7\.5 h are left today/);
   assert.equal(s.store, undefined, 'nothing was made');
   assert.equal((s.failures || 0), 0, 'the refusal is the person\'s, not the structure\'s');

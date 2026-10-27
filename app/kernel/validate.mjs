@@ -10,6 +10,13 @@
 import { terrainAt, region, walkable } from '../public/terrain.mjs';
 import { validSprite, FORMS } from '../public/forms.mjs';
 
+// The night, in hours. The instinct loop puts each person to bed for exactly
+// this long (instinct.mjs `sleepWindow`), and the day's labour budget is what is
+// left of the twenty-four: a person may work as long as they are awake, and not
+// a minute longer. One number, so the two can never drift apart — the budget was
+// a flat eight hours, which left the camp standing about all afternoon.
+export const SLEEP_HOURS_PER_DAY = 6;
+
 export const RULES = Object.freeze({
   // Survival, from the real evidence rather than a guess.
   //  - Water: ~3 days, and in a hot climate "as little as 3 days"
@@ -30,7 +37,8 @@ export const RULES = Object.freeze({
   // Work and time.
   minutesPerTile: 2,
   kcalPerTileWalk: 6,
-  laborHoursPerDay: 8,
+  sleepHoursPerDay: SLEEP_HOURS_PER_DAY,
+  laborHoursPerDay: 24 - SLEEP_HOURS_PER_DAY,
   walkHoursPerTile: 2 / 60,
 
   // Construction. The kernel computes labour from mass; a program cannot claim

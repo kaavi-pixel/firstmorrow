@@ -323,8 +323,8 @@ export function runStructures(S, day, { run = null } = {}) {
     } finally {
       // The process runs once a day and does not spend the camp's daylight: the
       // declared hours bound what it may make, they are not hours off the
-      // people's clock. Without this the world would gain eight simulated hours
-      // per structure per day and the seasons would slip.
+      // people's clock. Without this the world would gain a structure's declared
+      // hours of simulated time per structure per day and the seasons would slip.
       S.minute = clock;
     }
   }

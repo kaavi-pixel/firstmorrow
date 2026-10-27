@@ -22,7 +22,7 @@ export function rulesBrief() {
     'Nothing comes from nothing. Every process is mass-checked: output mass may never exceed input mass.',
     `Bodies: a person needs ${RULES.waterDrinkLDay} L of drinking water a day at 20 C, and more in the heat — about ${waterNeedL(40).toFixed(1)} L at 40 C. And ${RULES.foodPerPersonDay} kcal a day. A person can carry ${RULES.carryKg} kg.`,
     `Water is the fast killer: without it, about ${RULES.daysToDieWithoutWater} days. Food is the slow one: about ${RULES.daysToDieWithoutFood} days. Children under five and people over sixty go first.`,
-    `Work: ${RULES.laborHoursPerDay} person-hours per person per day, and less for anyone weakened or starving. Construction costs ${RULES.buildHoursPerKg} person-hours per kg. You cannot shorten that by declaring it.`,
+    `Work: ${RULES.laborHoursPerDay} person-hours per person per day — as long as they are awake, and the camp sleeps ${RULES.sleepHoursPerDay} hours of the twenty-four. Less for anyone weakened or starving. Construction costs ${RULES.buildHoursPerKg} person-hours per kg. You cannot shorten that by declaring it.`,
     `A finished structure you own may run a process: at most ${RULES.maxKgPerLaborHour} kg per labour hour. A garden yields ${RULES.soilToFoodKg} kg of food per kg of soil. A still beside the sea yields ${RULES.stillLitersPerLaborHour} L of fresh water per labour hour.`,
     `A process must declare its hours: return { labor: hours, make: { ... } }. A structure holds no more of anything than its own mass, and the hours you declare bound what it may make in the day it is given.`,
     'You may only make water in a structure that stands beside the sea, and food only out of soil you have brought to it.',
