@@ -43,6 +43,31 @@ export default async function handler(req, res) {
   const sub = url.searchParams.get('path');
   if (sub !== null) url.pathname = `/api/${sub}`;
 
+  // A guarded reset. Production data is not something a passing reader should be
+  // able to wipe: it is a POST, and it takes the token from the environment. With
+  // no token configured the route refuses everything rather than opening up.
+  if (url.pathname === '/api/reset') {
+    const want = process.env.FM_RESET_TOKEN;
+    if (req.method !== 'POST') {
+      res.statusCode = 405;
+      res.setHeader('allow', 'POST');
+      res.end('reset takes a POST');
+      return;
+    }
+    if (!want || req.headers['x-fm-reset'] !== want) {
+      res.statusCode = 403;
+      res.end('no');
+      return;
+    }
+    await service.reset();
+    const { state } = await service.tick();       // rebuild it from the seed
+    res.statusCode = 200;
+    res.setHeader('content-type', 'application/json');
+    res.setHeader('cache-control', 'no-store');
+    res.end(JSON.stringify({ ok: true, reset: true, ...livePayload(state) }));
+    return;
+  }
+
   if (url.pathname === '/api/live' || url.pathname === '/api/tick' || url.pathname === '/api/health') {
     try {
       const { state, advanced, skipped } = await service.tick();
