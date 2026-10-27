@@ -68,8 +68,25 @@ test('speech stays concise and reads naturally when addressing someone', () => {
   assert.ok(S.conversations.length > 0);
   for (const m of S.conversations) {
     assert.ok(m.text.length <= 240, `line is too long: ${m.text}`);
-    assert.ok(!m.text.startsWith(`${m.target}, I`), `awkward vocative: ${m.text}`);
+    const prefix = `${m.target}, `;
+    const rest = m.text.startsWith(prefix) ? m.text.slice(prefix.length) : '';
+    const properNoun = /^I(?:\s|$|['’])/.test(rest) || S.structures.some(s => rest.startsWith(s.name));
+    assert.ok(!/^[A-Z]/.test(rest) || properNoun, `awkward vocative: ${m.text}`);
   }
+});
+
+test('addressing someone preserves a capitalised structure name', () => {
+  const S = createWorld({ seed: 2049 });
+  S.structures.push({
+    id: 'storm-hut', name: 'Storm Hut', built: true, x: 14, y: 20,
+    mass: 50, progressHours: 10, laborHours: 10,
+    authorId: 'architect', description: 'A sturdy roof beside the camp.',
+  });
+  S.conversationClock = { nextAt: 30, turn: 1 };
+  advance(S, 30);
+  const opener = S.conversations.find(m => m.kind === 'agents');
+  assert.ok(opener, 'the agents held their exchange');
+  assert.ok(opener.text.startsWith(`${opener.target}, Storm Hut`), opener.text);
 });
 
 test('dead people do not join in, and history stays bounded', () => {

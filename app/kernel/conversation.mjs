@@ -310,10 +310,12 @@ function topicFor(S, w, turn) {
   return 'life';
 }
 
-function naturalAddress(name, text) {
+function naturalAddress(S, name, text) {
   const prefix = `${name}, `;
   if (!text.startsWith(prefix) || text.length <= prefix.length) return text;
-  return prefix + text.charAt(prefix.length).toLowerCase() + text.slice(prefix.length + 1);
+  const rest = text.slice(prefix.length);
+  if (/^I(?:\s|$|['’])/.test(rest) || S.structures.some(s => rest.startsWith(s.name))) return text;
+  return prefix + rest.charAt(0).toLowerCase() + rest.slice(1);
 }
 
 function concise(text) {
@@ -341,7 +343,7 @@ function personExchange(S, turn) {
     .sort((a, b) => distance(a, speaker) - distance(b, speaker) || a.id.localeCompare(b.id))[0];
   const topic = topicFor(S, weatherOn(S.weather, dayIndex(S)), turn);
   const variant = Math.floor(turn / 2) % 3;
-  say(S, 'people', speaker, target, naturalAddress(target.name, OPENERS[topic][variant](S, speaker, target)));
+  say(S, 'people', speaker, target, naturalAddress(S, target.name, OPENERS[topic][variant](S, speaker, target)));
   say(S, 'people', target, speaker, REPLIES[topic][variant](S, target, speaker));
   say(S, 'people', speaker, target, CLOSERS[topic][variant](S, speaker, target));
   return true;
@@ -353,7 +355,7 @@ function agentExchange(S, turn) {
   const target = S.authors[(turn + 1) % S.authors.length];
   const topic = topicFor(S, weatherOn(S.weather, dayIndex(S)), turn);
   const variant = Math.floor(turn / 2) % 3;
-  say(S, 'agents', speaker, target, naturalAddress(target.name, AGENT_OPENERS[topic][variant](S, speaker, target)));
+  say(S, 'agents', speaker, target, naturalAddress(S, target.name, AGENT_OPENERS[topic][variant](S, speaker, target)));
   say(S, 'agents', target, speaker, AGENT_REPLIES[topic][variant](S, target, speaker));
   say(S, 'agents', speaker, target, AGENT_CLOSERS[topic][variant](S, speaker, target));
   return true;
