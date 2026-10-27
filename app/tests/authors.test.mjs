@@ -36,7 +36,7 @@ const runner = (code, s, S) => runProgram(code, structureEnv(S, s), 1);
 // ---------------------------------------------------------------- the reply
 
 test('the reply is dug out of whatever the model wrapped it in', () => {
-  const body = { think: 'water first', tell: 'digging', build: { name: 'Well', x: 3, y: 4, mass: 12, form: 'hut', program: 'return {labor: 1};' } };
+  const body = { think: 'water first', tell: 'digging', build: { name: 'Well', description: 'A well, so the camp has water within reach of the tents.', x: 3, y: 4, mass: 12, form: 'hut', program: 'return {labor: 1};' } };
   for (const wrapped of [
     JSON.stringify(body),
     '```json\n' + JSON.stringify(body) + '\n```',
@@ -96,7 +96,7 @@ test('an author proposes, the gate accepts, and the structure is theirs', async 
     call: says({
       think: 'they need a roof before the first storm',
       tell: 'Engineer, I am starting a lean-to.',
-      build: { name: 'Lean-to', x: spot.x, y: spot.y, mass: 9, form: 'hut', shelter: 3, program: 'return { labor: 1, draw: { material: 1 } };' },
+      build: { name: 'Lean-to', description: 'A lean-to, so three people have a roof before the first storm.', x: spot.x, y: spot.y, mass: 9, form: 'hut', shelter: 3, program: 'return { labor: 1, draw: { material: 1 } };' },
     }),
     now: NOW,
   });
@@ -118,7 +118,7 @@ test('an author proposes, the gate accepts, and the structure is theirs', async 
 test('a design that breaks reality is refused, and the author is told why', async () => {
   const S = createWorld();
   const spot = spotNear(S);
-  const bad = { build: { name: 'Longhouse', x: spot.x, y: spot.y, mass: 9, form: 'hut', shelter: 5 } };
+  const bad = { build: { name: 'Longhouse', description: 'A longhouse that shelters more people than its mass can hold.', x: spot.x, y: spot.y, mass: 9, form: 'hut', shelter: 5 } };
 
   const first = await authorTurn(S, { call: says(bad), now: NOW });
   assert.equal(first.status, 'refused');
@@ -161,7 +161,7 @@ test('what an author designs is built by hand, and then runs once a day', async 
 
   await authorTurn(S, {
     call: says({ think: 'a hole in the ground', tell: 'digging here', build: {
-      name: 'Dig', x: spot.x, y: spot.y, mass: 6, form: 'hut',
+      name: 'Dig', description: 'A shallow dig, to pull material out of the ground underfoot.', x: spot.x, y: spot.y, mass: 6, form: 'hut',
       program: 'return { labor: 1, draw: { material: 1 } };' } }),
     now: NOW,
   });

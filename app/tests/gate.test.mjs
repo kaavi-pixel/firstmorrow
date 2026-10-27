@@ -5,6 +5,7 @@ import { createWorld } from '../kernel/world.mjs';
 import { applyDeclarations, RULES } from '../kernel/validate.mjs';
 import { terrainAt, region } from '../public/terrain.mjs';
 import { runProgram } from '../kernel/sandbox.mjs';
+import { livePayload } from '../kernel/payload.mjs';
 
 const actorAt = (x, y, extra = {}) => ({
   id: 'probe', name: 'Probe', kind: 'author', x, y, alive: true, health: 100,
@@ -89,13 +90,31 @@ test('a program that lies is refused, and nothing is applied', () => {
 test('shelter cannot be claimed out of thin air', () => {
   const S = createWorld();
   const who = actorAt(S.camp.x, S.camp.y);
-  assert.throws(() => applyDeclarations(S, who, { propose: { name: 'Hall', x: S.camp.x + 1, y: S.camp.y, mass: 6, shelter: 10, form: 'hall' } }), /at least 30 kg/);
+  assert.throws(() => applyDeclarations(S, who, { propose: { name: 'Hall', description: 'A hall that claims more shelter than its material can hold.', x: S.camp.x + 1, y: S.camp.y, mass: 6, shelter: 10, form: 'hall' } }), /at least 30 kg/);
 });
 
 test('a proposal that names no art and no form is refused', () => {
   const S = createWorld();
   const who = actorAt(S.camp.x, S.camp.y);
-  assert.throws(() => applyDeclarations(S, who, { propose: { name: 'Thing', x: S.camp.x + 1, y: S.camp.y, mass: 8 } }), /form or sprite/);
+  assert.throws(() => applyDeclarations(S, who, { propose: { name: 'Thing', description: 'A thing with no shape at all, which cannot be drawn.', x: S.camp.x + 1, y: S.camp.y, mass: 8 } }), /form or sprite/);
+});
+
+test('a proposal with no description is refused', () => {
+  const S = createWorld();
+  const who = actorAt(S.camp.x, S.camp.y);
+  assert.throws(() => applyDeclarations(S, who, { propose: { name: 'Mystery', x: S.camp.x + 1, y: S.camp.y, mass: 8, form: 'hut' } }), /description/);
+  assert.throws(() => applyDeclarations(S, who, { propose: { name: 'Mystery', description: 'too short', x: S.camp.x + 1, y: S.camp.y, mass: 8, form: 'hut' } }), /description/);
+  assert.equal(S.structures.length, 0, 'and nothing was built');
+});
+
+test('a description is kept on the structure, and read back to the observer', () => {
+  const S = createWorld();
+  const who = actorAt(S.camp.x, S.camp.y);
+  applyDeclarations(S, who, { propose: { name: 'Garden', description: 'A garden, so the camp grows food instead of walking for it.', x: S.camp.x + 1, y: S.camp.y, mass: 20, form: 'hut' } });
+  const s = S.structures.at(-1);
+  assert.equal(s.description, 'A garden, so the camp grows food instead of walking for it.');
+  const b = livePayload(S).buildings.find(x => x.id === s.id);
+  assert.equal(b.description, 'A garden, so the camp grows food instead of walking for it.', 'the browser can read what it is for');
 });
 
 test('region exposes a physical, not a score', () => {

@@ -74,7 +74,7 @@ export function createWorldRenderer(canvas,{getWorld,getSpeed,activityFor,onSele
   const c=canvas.getContext('2d');
   let w=0,h=0,dpr=1,zoom=null,panX=0,panY=0,hit=[],time=0,prev=performance.now();
   const spriteCache=new Map(),peopleCache=new Map(),pos=new Map(),pointers=new Map();
-  let drag=null,pinch=null,yaw=0,yawTarget=0,layoutVersion=null;
+  let drag=null,pinch=null,yaw=0,yawTarget=0,layoutVersion=null,selected=null;
   const CY=185,iso=(x,y,z=0)=>({x:(x-y)*16,y:(x+y)*8-z});
   // View rotation around the centre of the land. Everything placed on the ground goes through proj.
   const C=11,rot=(x,y)=>{const cs=Math.cos(yaw),sn=Math.sin(yaw),dx=x-C,dy=y-C;return {x:C+dx*cs-dy*sn,y:C+dx*sn+dy*cs};};
@@ -197,6 +197,18 @@ export function createWorldRenderer(canvas,{getWorld,getSpeed,activityFor,onSele
         hit.push({x:pt.x-10+ox,y:pt.y-24+oy,w:20,h:28,type:'person',id:item.obj.id});
       }
     }
+    if(selected){
+      // Ring under whatever the observer has picked, so a click always shows an
+      // answer. Drawn inside the world transform, so it tracks pan, zoom and spin.
+      const it=drawables.find(d=>d.obj&&d.obj.id===selected.id);
+      if(it){
+        let px,py;
+        if(it.kind==='building'){const q=proj(it.obj.x,it.obj.y);px=q.x;py=q.y+2;}
+        else{const q=proj(it.p.x,it.p.y);px=q.x+(it.ox||0);py=q.y+(it.oy||0);}
+        c.save();c.strokeStyle='rgba(255,236,180,.95)';c.lineWidth=2/zoom;
+        c.beginPath();c.ellipse(px,py,15,8,0,0,Math.PI*2);c.stroke();c.restore();
+      }
+    }
     if(!reduced.matches){for(let i=0;i<8;i++){const px=(time*7+i*91)%640-320,py=40+(i*37)%260;c.fillStyle='#e0bd8540';c.fillRect(px,py,3,1);}}
     c.restore();
     const dark=darkness(world.minute);
@@ -225,7 +237,11 @@ export function createWorldRenderer(canvas,{getWorld,getSpeed,activityFor,onSele
     if(yaw!==yawTarget){const d=yawTarget-yaw;yaw=Math.abs(d)<.002||reduced.matches?yawTarget:yaw+d*Math.min(1,dt*10);}draw(dt);requestAnimationFrame(frame);}
   function pick(sx,sy){const p=toWorld(sx,sy);return [...hit].reverse().find(t=>p.x>=t.x&&p.x<=t.x+t.w&&p.y>=t.y&&p.y<=t.y+t.h)||null;}
   canvas.addEventListener('pointerdown',e=>{
-    canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.offsetX,y:e.offsetY});
+    // Capture is a convenience, not a requirement. If the browser refuses it the
+    // click must still be registered, so never let it throw before the pointer is
+    // recorded.
+    try{canvas.setPointerCapture(e.pointerId);}catch{}
+    pointers.set(e.pointerId,{x:e.offsetX,y:e.offsetY});
     if(pointers.size===1)drag={x:e.offsetX,y:e.offsetY,px:panX,py:panY,yaw:yawTarget,turn:e.button===2||e.shiftKey||e.ctrlKey,moved:false};
     if(pointers.size===2){const [a,b]=[...pointers.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:zoom,a:Math.atan2(b.y-a.y,b.x-a.x),yaw:yawTarget};drag=null;}
   });
@@ -243,8 +259,14 @@ export function createWorldRenderer(canvas,{getWorld,getSpeed,activityFor,onSele
   canvas.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.offsetX,e.offsetY,zoom*Math.exp(-e.deltaY*.0015));},{passive:false});
   addEventListener('resize',resize);resize();requestAnimationFrame(frame);
   return {draw,clearCache(){spriteCache.clear();peopleCache.clear();pos.clear();},
+    select(sel){selected=sel&&sel.id?sel:null;},
     zoomBy(f){zoomAt(w/2,h/2,zoom*f);},recenter(){zoom=fit();panX=0;panY=0;},
     rotateBy(rad){yawTarget+=rad;},get angle(){return yaw;},
+    // QA hooks: what the renderer believes is clickable, and what a click at a
+    // screen point would select. Same spirit as the fm hooks in app.js.
+    hits(){return hit.map(t=>({...t}));},
+    pickAt(sx,sy){return pick(sx,sy);},
+    get view(){return {zoom,panX,panY,w,h};},
     focus(x,y){const p=proj(x,y);panX=-p.x*zoom;panY=-(p.y-CY)*zoom;},
     advance(ms){time+=ms/1000;draw(ms/1000);}};
 }

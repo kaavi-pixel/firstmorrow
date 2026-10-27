@@ -98,26 +98,104 @@ async function poll() {
       renderer = createWorldRenderer($('world'), {
         getWorld: () => view, getSpeed: () => 1,
         activityFor: i => payload.activities[i] || { tile: view.inhabitants[i] || { x: 13, y: 21 }, kind: 'idle' },
-        onSelect: hit => selectPerson(hit),
+        onSelect: hit => selectThing(hit),
         getAgents: () => payload.authors,
         agentActivity: a => payload.authorActivity[payload.authors.indexOf(a)] || null,
         getSpeech: obj => payload.speech[obj.id] || null,
       });
       // QA hooks, in the spirit of v1: let a test drive the renderer without
       // depending on the animation frame.
-      window.fm = { renderer, view, payload: () => payload, draw: dt => renderer.draw(dt ?? 0.016), rotate: r => renderer.rotateBy(r) };
+      window.fm = { renderer, view, payload: () => payload, draw: dt => renderer.draw(dt ?? 0.016), rotate: r => renderer.rotateBy(r), select: selectThing };
     }
   } catch (e) { $('status-label').textContent = 'Offline'; }
   setTimeout(poll, 1000);
 }
 
-function selectPerson(hit) {
+const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const DOING = {
+  idle: 'standing about', walk: 'walking', fetch: 'fetching water', drink: 'drinking',
+  forage: 'foraging for food', carry: 'carrying a load home', eat: 'eating', build: 'building',
+  shelter: 'sheltering', cower: 'cowering in the open', sleep: 'asleep', 'no-water': 'looking for water',
+};
+const bar = v => `<span class="bar"><i style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%"></i></span>`;
+
+// Every clickable thing answers with a card. A person, an author, and the thing
+// an author designed all have one; clicking empty ground closes it.
+function selectThing(hit) {
   const card = $('card');
-  if (!hit || hit.type !== 'person') { card.hidden = true; return; }
-  const p = payload.inhabitants.find(i => i.id === hit.id);
+  if (renderer && renderer.select) renderer.select(hit);
+  if (!hit) { card.hidden = true; return; }
+  if (hit.type === 'person') return showPerson(card, hit.id);
+  if (hit.type === 'agent') return showAgent(card, hit.id);
+  if (hit.type === 'building') return showBuilding(card, hit.id);
+  card.hidden = true;
+}
+
+function showPerson(card, id) {
+  const p = payload.inhabitants.find(i => i.id === id);
   if (!p) { card.hidden = true; return; }
-  card.innerHTML = `<h3>${p.name}</h3><p class="muted small">${p.age} years · health ${p.health}</p>`;
+  card.innerHTML = `
+    <div class="card-head">
+      <canvas class="person"></canvas>
+      <div><h3>${esc(p.name)}</h3><p>${p.age} years · health ${p.health} · ${esc(DOING[p.doing] || p.doing)}</p></div>
+    </div>
+    <div class="need"><span>Thirst</span>${bar(p.thirst)}<span>${Math.round(p.thirst * 100)}%</span></div>
+    <div class="need"><span>Hunger</span>${bar(p.starving)}<span>${Math.round(p.starving * 100)}%</span></div>
+    <div class="tags">
+      <span class="tag">carrying ${p.carrying.water} L of water</span>
+      <span class="tag">${p.carrying.food.toLocaleString()} kcal</span>
+      ${p.pregnant ? '<span class="tag">pregnant</span>' : ''}
+      ${p.children ? `<span class="tag">${p.children} children</span>` : ''}
+    </div>`;
+  paintPerson(card.querySelector('canvas'), p);
   card.hidden = false;
 }
+
+function showAgent(card, id) {
+  const a = payload.authors.find(x => x.id === id);
+  if (!a) { card.hidden = true; return; }
+  const mine = payload.buildings.filter(b => b.author === a.name);
+  card.innerHTML = `
+    <div class="card-head">
+      <canvas data-sprite-agent></canvas>
+      <div><h3>${esc(a.name)}</h3><p>${esc(a.role || 'author')}${a.model ? ' · ' + esc(a.model) : ''}</p></div>
+    </div>
+    <p>Designs the world from outside it. It cannot be killed, it does not eat, and it cannot change reality.</p>
+    <div class="tags">
+      <span class="tag">${a.standing} standing</span>
+      <span class="tag">${a.calls} calls spent</span>
+    </div>
+    ${mine.length ? `<div class="tags">${mine.map(b => `<span class="tag">${esc(b.name)}</span>`).join('')}</div>` : ''}
+    ${a.design ? `<details><summary>Its latest code</summary><pre>${esc(a.design)}</pre></details>` : ''}`;
+  paintAgent(card.querySelector('canvas'), a);
+  card.hidden = false;
+}
+
+function showBuilding(card, id) {
+  const b = payload.buildings.find(x => x.id === id);
+  if (!b) { card.hidden = true; return; }
+  const state = b.built
+    ? `standing${b.author ? ' · designed by ' + esc(b.author) : ''}`
+    : `${Math.round(b.progressHours)} of ${b.laborHours} person-hours done${b.author ? ' · designed by ' + esc(b.author) : ''}`;
+  card.innerHTML = `
+    <div class="card-head">
+      <canvas></canvas>
+      <div><h3>${esc(b.name)}</h3><p>${state}</p></div>
+    </div>
+    ${b.description
+      ? `<p>${esc(b.description)}</p>`
+      : '<p class="muted">The author did not say what this is for.</p>'}
+    <div class="tags">
+      <span class="tag">${b.mass} kg of material</span>
+      ${b.shelter ? `<span class="tag">shelters ${b.shelter}</span>` : ''}
+      <span class="tag">tile ${b.x},${b.y}</span>
+    </div>
+    ${b.program ? `<details><summary>Its program</summary><pre>${esc(b.program)}</pre></details>` : ''}`;
+  paintSprite(card.querySelector('canvas'), b);
+  card.hidden = false;
+}
+
+if (!window.fm) window.fm = {};
+window.fm.select = selectThing;
 
 poll();

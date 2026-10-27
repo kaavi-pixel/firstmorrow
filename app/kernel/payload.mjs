@@ -44,14 +44,30 @@ export function livePayload(S, now = Date.now()) {
     },
     buildings: S.structures.map(s => ({
       id: s.id, name: s.name, x: s.x, y: s.y, sprite: s.sprite, palette: PALETTE,
+      // What the author said this is for. It is the reason the thing exists, and
+      // the only part of a structure a visitor can actually read.
+      description: s.description || null,
       built: s.built, progressHours: s.progressHours, laborHours: s.laborHours,
       active: true, damaged: !!s.damaged,
+      mass: Math.round(s.mass || 0), shelter: s.shelter || 0,
+      author: (S.authors.find(a => a.id === s.authorId) || {}).name || null,
+      program: s.program || null,
       physical: { shelterAreaM2: (s.shelter || 0) * 3.5 },
     })),
     // art.js expects inhabitants and a parallel activity list.
-    inhabitants: people.map(p => ({ id: p.id, name: p.name, color: p.color, hair: p.hair, x: p.x, y: p.y, age: Math.floor(p.age), health: Math.round(p.health), doing: p.activity || 'idle' })),
+    inhabitants: people.map(p => ({
+      id: p.id, name: p.name, color: p.color, hair: p.hair, x: p.x, y: p.y,
+      age: Math.floor(p.age), health: Math.round(p.health), doing: p.activity || 'idle',
+      thirst: +(p.thirst || 0).toFixed(2), starving: +(p.starving || 0).toFixed(2),
+      carrying: { water: +(p.pack.water || 0).toFixed(1), food: Math.round(p.pack.food || 0) },
+      children: p.children || 0, pregnant: !!p.pregnant,
+    })),
     activities: people.map(p => activityFor(S, p)),
-    authors: S.authors.map(a => ({ id: a.id, name: a.name, model: a.model, color: a.color, role: a.role })),
+    authors: S.authors.map(a => ({
+      id: a.id, name: a.name, model: a.model, color: a.color, role: a.role,
+      calls: a.calls || 0, standing: S.structures.filter(s => s.authorId === a.id).length,
+      design: a.lastProgram || null,
+    })),
     authorActivity: S.authors.map(a => ({ tile: { x: a.x, y: a.y }, kind: a.say ? 'think' : 'idle' })),
     council: (S.council || []).slice(-20).map(m => ({ name: m.name, at: m.t, text: m.text })),
     speech: Object.fromEntries([...people, ...S.authors].filter(p => p.say && S.minute - p.saidAt < 720).map(p => [p.id, p.say])),

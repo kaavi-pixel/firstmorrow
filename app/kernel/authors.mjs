@@ -40,6 +40,7 @@ Return ONLY a JSON object. No prose, no code fences, no commentary around it.
   "tell": "one short message to the other authors",
   "build": {
     "name": "short name",
+    "description": "what this is for, and why it is the right next thing. Two sentences at the most.",
     "x": 0,
     "y": 0,
     "mass": 30,
@@ -50,6 +51,7 @@ Return ONLY a JSON object. No prose, no code fences, no commentary around it.
 }
 
 "form" is one of: ${Object.keys(FORMS).join(', ')}. You may instead supply "sprite": an array of 16 strings of 16 characters, digits 0-8 indexing this palette: ${'012345678'} (0 is transparent).
+"description" is required for every build, and it is what a visitor reads when they click the structure. Say what it does for the people, not what it looks like. It is refused below 12 characters, and the day is wasted.
 "x" and "y" are tiles. Place it within 16 tiles of camp, not on camp itself, and not where something already stands.
 "mass" is kilograms of material. Material is finite — the camp starts with almost none, and drawing it from the ground costs the people labour.
 "shelter" is how many people it protects from a storm. It needs at least 3 kg of material per person.
@@ -92,6 +94,7 @@ export function parseAuthorReply(raw) {
     if (typeof b !== 'object' || Array.isArray(b)) throw new Error('"build" must be an object or null.');
     const out = {
       name: text(b.name, 40) || 'structure',
+      description: text(b.description, 400),
       x: b.x, y: b.y,
       mass: b.mass,
       shelter: b.shelter === undefined ? 0 : b.shelter,

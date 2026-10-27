@@ -240,6 +240,10 @@ export function applyDeclarations(S, person, decl) {
     if (x === S.camp.x && y === S.camp.y) throw new Error('The camp tile has to stay clear.');
     if (!walkable(S.terrain, x, y)) throw new Error('That tile cannot be built on.');
     const name = String(d.name || 'structure').slice(0, 40);
+    // What it is for, in the author's own words. A structure nobody can explain is
+    // a structure nobody can judge, and the observer has to be able to read it.
+    const description = typeof d.description === 'string' ? d.description.trim().slice(0, 400) : '';
+    if (description.length < 12) throw new Error('propose needs a description: what this is for, and why it is the right next thing.');
 
     // A shelter protects this many people from weather. Reality bounds how much
     // shelter a given mass of material can provide; an author cannot claim more.
@@ -271,12 +275,12 @@ export function applyDeclarations(S, person, decl) {
     takeFrom(source, need, 'building');
     const id = `s${(S.structures.length + 1).toString().padStart(2, '0')}-${x}.${y}`;
     S.structures.push({
-      id, x, y, name, sprite, mass: d.mass, shelter, program,
+      id, x, y, name, description, sprite, mass: d.mass, shelter, program,
       laborHours: Math.round(d.mass * RULES.buildHoursPerKg * 10) / 10,
       progressHours: 0, built: false, authorId: ownerOf(person), startedAt: S.minute,
     });
     S.log.push({ t: S.minute, kind: 'plan', text: isAuthor
-      ? `${person.name} designed ${name} (${d.mass} kg) at ${x}.${y}.`
+      ? `${person.name} designed ${name} (${d.mass} kg) at ${x}.${y}: ${description}`
       : `${person.name} began ${name} (${d.mass} kg).` });
     applied.push('propose');
   }
