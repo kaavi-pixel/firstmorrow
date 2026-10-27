@@ -310,11 +310,23 @@ function topicFor(S, w, turn) {
   return 'life';
 }
 
+function naturalAddress(name, text) {
+  const prefix = `${name}, `;
+  if (!text.startsWith(prefix) || text.length <= prefix.length) return text;
+  return prefix + text.charAt(prefix.length).toLowerCase() + text.slice(prefix.length + 1);
+}
+
+function concise(text) {
+  const clean = text.trim();
+  if (clean.length <= 240) return clean;
+  return `${clean.slice(0, 237).replace(/\s+\S*$/, '')}…`;
+}
+
 function say(S, kind, speaker, target, text) {
   if (!speaker || !target) return;
   const message = {
     t: S.minute, kind, speakerId: speaker.id, speaker: speaker.name,
-    targetId: target.id, target: target.name, text: text.trim().slice(0, 240),
+    targetId: target.id, target: target.name, text: concise(text),
   };
   S.conversations.push(message);
   speaker.say = message.text;
@@ -329,7 +341,7 @@ function personExchange(S, turn) {
     .sort((a, b) => distance(a, speaker) - distance(b, speaker) || a.id.localeCompare(b.id))[0];
   const topic = topicFor(S, weatherOn(S.weather, dayIndex(S)), turn);
   const variant = Math.floor(turn / 2) % 3;
-  say(S, 'people', speaker, target, OPENERS[topic][variant](S, speaker, target));
+  say(S, 'people', speaker, target, naturalAddress(target.name, OPENERS[topic][variant](S, speaker, target)));
   say(S, 'people', target, speaker, REPLIES[topic][variant](S, target, speaker));
   say(S, 'people', speaker, target, CLOSERS[topic][variant](S, speaker, target));
   return true;
@@ -341,7 +353,7 @@ function agentExchange(S, turn) {
   const target = S.authors[(turn + 1) % S.authors.length];
   const topic = topicFor(S, weatherOn(S.weather, dayIndex(S)), turn);
   const variant = Math.floor(turn / 2) % 3;
-  say(S, 'agents', speaker, target, AGENT_OPENERS[topic][variant](S, speaker, target));
+  say(S, 'agents', speaker, target, naturalAddress(target.name, AGENT_OPENERS[topic][variant](S, speaker, target)));
   say(S, 'agents', target, speaker, AGENT_REPLIES[topic][variant](S, target, speaker));
   say(S, 'agents', speaker, target, AGENT_CLOSERS[topic][variant](S, speaker, target));
   return true;

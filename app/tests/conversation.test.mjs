@@ -62,6 +62,16 @@ test('an older world starts talking now, not with a backdated conversation', () 
   assert.ok(S.conversations.length > 0, 'the next scheduled exchange still happens');
 });
 
+test('speech stays concise and reads naturally when addressing someone', () => {
+  const S = createWorld({ seed: 2049 });
+  advance(S, 600);
+  assert.ok(S.conversations.length > 0);
+  for (const m of S.conversations) {
+    assert.ok(m.text.length <= 240, `line is too long: ${m.text}`);
+    assert.ok(!m.text.startsWith(`${m.target}, I`), `awkward vocative: ${m.text}`);
+  }
+});
+
 test('dead people do not join in, and history stays bounded', () => {
   const S = createWorld({ seed: 2049 });
   for (const p of S.people) { p.alive = false; p.health = 0; }
