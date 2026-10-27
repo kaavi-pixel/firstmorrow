@@ -226,7 +226,7 @@ async function poll() {
     apply(await res.json());
     if (!renderer) {
       renderer = createWorldRenderer($('world'), {
-        getWorld: () => view, getSpeed: () => 1,
+        getWorld: () => view, getSpeed: () => (viewer && Number(viewer.speed)) || 1,
         activityFor: i => payload.activities[i] || { tile: view.inhabitants[i] || { x: 13, y: 21 }, kind: 'idle' },
         onSelect: hit => selectThing(hit),
         getAgents: () => payload.authors,
