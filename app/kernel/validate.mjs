@@ -82,7 +82,11 @@ const fail = m => { throw new Reject(m); };
 
 // attr -> the pack or the camp stores, whichever holds it
 function heldBy(S, p) { return (packedAtCamp(S, p) ? S.camp.stock : p.pack); }
-function packedAtCamp(S, p) { return p.x === S.camp.x && p.y === S.camp.y; }
+// The camp's stores are communal and reach the whole camp square, because only
+// one person can stand on the camp tile itself.
+function packedAtCamp(S, p) {
+  return Math.abs(p.x - S.camp.x) <= 1 && Math.abs(p.y - S.camp.y) <= 1;
+}
 
 function takeFrom(store, want, what) {
   for (const s of SUBSTANCES) {

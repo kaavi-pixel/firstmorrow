@@ -40,8 +40,14 @@ If a rule has to bend to make something work, the something is wrong — not the
 
 They are not mannequins waiting for instructions. Left alone they drink when dry, walk to water
 they can see, carry it home, eat when there is food, and get under a roof when a storm is coming.
+They keep the camp supplied past the point of comfort — water, food, and the material and soil the
+authors' designs will be built from — and they sleep in shifts, so the camp is never wholly asleep.
 An errand is a goal they carry out across many ticks, not a single decision. They obey exactly the
 same gate as authored code and get no privileges from being human.
+
+**One body to a tile.** Two people never share a tile: the second waits, or walks around. The camp
+is therefore a place and not a point — the camp tile and the eight around it — or five people would
+queue outside their own water butt and die of thirst beside it.
 
 What they cannot do is invent, plan, build, or improve. That is the entire difference between them
 and the authors, and it is where the AI earns its place: their instincts keep them alive for weeks,

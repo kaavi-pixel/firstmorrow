@@ -17,6 +17,7 @@ function activityFor(S, p) {
   // is drawn.
   const kind = p.activity || 'idle';
   const art = { sleep: 'sleep', drink: 'walk', eat: 'walk', fetch: 'walk', carry: 'walk', forage: 'walk',
+    gather: 'walk', haul: 'walk', talk: 'idle',
     build: 'build', walk: 'walk', shelter: 'idle', cower: 'idle', 'no-water': 'idle', idle: 'idle', dying: 'idle' };
   return { tile: { x: p.x, y: p.y }, kind: art[kind] || 'idle', doing: kind };
 }
@@ -70,6 +71,7 @@ export function livePayload(S, now = Date.now()) {
     })),
     authorActivity: S.authors.map(a => ({ tile: { x: a.x, y: a.y }, kind: a.say ? 'think' : 'idle' })),
     council: (S.council || []).slice(-20).map(m => ({ name: m.name, at: m.t, text: m.text })),
+    conversations: (S.conversations || []).slice(-60).reverse(),
     speech: Object.fromEntries([...people, ...S.authors].filter(p => p.say && S.minute - p.saidAt < 720).map(p => [p.id, p.say])),
     log: S.log.slice(-40).reverse(),
     dead: S.graveyard,

@@ -17,11 +17,49 @@ import { RULES, waterNeedL, capacity } from './validate.mjs';
 import { weatherOn } from './weather.mjs';
 
 export const INSTINCT_MINUTES = 2;
-export const KEEP_DAYS = 1.5;     // water they like to have on them, in days
-export const CAMP_DAYS = 3;       // camp water they try to keep, in days
-export const FOOD_DAYS = 2;       // camp food they try to keep, in days
+export const KEEP_DAYS = 2;       // water they like to have on them, in days
+export const CAMP_DAYS = 6;       // camp water they try to keep, in days
+export const FOOD_DAYS = 5;       // camp food they try to keep, in days
+export const MORE_DAYS = 5;       // how far past those targets a surplus is still worth working
+export const MATERIAL_KEEP = 500; // kg of building material they like in the yard
+export const SOIL_KEEP = 150;     // kg of soil, for whatever turns soil into food
 
-const PEOPLE_AT = (S, x, y) => S.people.filter(p => p.alive && p.x === x && p.y === y).length;
+// One human to a tile. Not a courtesy — a rule. Two people cannot stand in the
+// same place, so a step onto an occupied tile is not a step, and "home" means
+// the camp tile or one of the eight around it (a doorway is not a room).
+const occupantAt = (S, x, y, self) => S.people.some(q => q !== self && q.alive && q.x === x && q.y === y);
+const nearCamp = (S, p) => Math.abs(p.x - S.camp.x) <= 1 && Math.abs(p.y - S.camp.y) <= 1;
+
+/** The nearest tile within arm's reach that satisfies `pick`, underfoot first. */
+function reachable(S, p, pick) {
+  const here = terrainAt(S.terrain, p.x, p.y);
+  if (here && pick(here)) return here;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const t = terrainAt(S.terrain, p.x + dx, p.y + dy);
+    if (t && pick(t)) return t;
+  }
+  return null;
+}
+
+/**
+ * The nearest tile with something the camp needs, within reach, that nobody else
+ * has already claimed. Three people walking to the same stone is one person
+ * working and two people queuing, and the queue is what looks like idleness.
+ */
+function nearestSubstance(S, p, key, radius = RULES.reachTiles) {
+  const claimed = new Set(S.people
+    .filter(q => q.alive && q !== p && q.goal && q.goal.at)
+    .map(q => q.goal.at.y * 128 + q.goal.at.x));
+  let best = null, bestD = Infinity;
+  for (const t of S.terrain.tiles.values()) {
+    if (t.regionId === 'sea' || !(t[key] > 0)) continue;
+    const d = Math.abs(t.x - p.x) + Math.abs(t.y - p.y);
+    if (d === 0 || d > radius || d >= bestD) continue;
+    if (claimed.has(t.y * 128 + t.x)) continue;
+    bestD = d; best = { x: t.x, y: t.y };
+  }
+  return best;
+}
 
 /** The nearest tile with drinkable water still in it, within reach of where they stand. */
 function nearestWater(S, p) {
@@ -65,9 +103,14 @@ const sheltered = (S, p) => S.structures.some(s => s.built && s.shelter &&
   Math.abs(s.x - p.x) <= 2 && Math.abs(s.y - p.y) <= 2);
 
 const navKey = (x, y) => y * 128 + x;
+const CARDINALS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const dist = (ax, ay, bx, by) => Math.abs(ax - bx) + Math.abs(ay - by);
 
-/** A real route across the land, not a hopeful diagonal. Breadth-first, bounded. */
-function findRoute(S, from, to, limit = 1500) {
+/** A real route across the land, not a hopeful diagonal. Breadth-first, bounded.
+ *  A tile somebody is standing on is a wall, so nobody plans a march through a
+ *  neighbour; the one exception is the tile they are heading for, where they
+ *  will queue. */
+function findRoute(S, from, to, self, limit = 1500) {
   const start = navKey(from.x, from.y), goal = navKey(to.x, to.y);
   if (start === goal) return [];
   const prev = new Map([[start, null]]);
@@ -76,11 +119,12 @@ function findRoute(S, from, to, limit = 1500) {
   while (head < q.length && head < limit) {
     const cur = q[head++];
     const cx = cur & 127, cy = (cur - cx) / 128;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    for (const [dx, dy] of CARDINALS) {
       const nx = cx + dx, ny = cy + dy, k = navKey(nx, ny);
       if (prev.has(k)) continue;
       const t = terrainAt(S.terrain, nx, ny);
       if (!t || t.regionId === 'sea') continue;
+      if (k !== goal && occupantAt(S, nx, ny, self)) continue;
       prev.set(k, cur);
       if (k === goal) {
         const path = [];
@@ -93,6 +137,42 @@ function findRoute(S, from, to, limit = 1500) {
   return [];
 }
 
+/** One step onto a tile that is free. Sea and other people both say no. */
+function walkStep(S, p, x, y) {
+  if (x === p.x && y === p.y) return false;
+  const t = terrainAt(S.terrain, x, y);
+  if (!t || !walkable(S.terrain, x, y) || t.regionId === 'sea') return false;
+  if (occupantAt(S, x, y, p)) return false;
+  p.prev = { x: p.x, y: p.y };
+  p.x = x; p.y = y;
+  p.pack.food = Math.max(0, p.pack.food - RULES.kcalPerTileWalk);
+  p.activity = 'walk';
+  return true;
+}
+
+/**
+ * A step toward the goal that goes around whoever is standing in the way.
+ * Nearest first, and never straight back to where they just stood unless that is
+ * the only way on: two people squeezing past each other must not end up
+ * shuttling between the same two tiles for the rest of the day.
+ */
+function freeStepToward(S, p, target) {
+  const dx = Math.sign(target.x - p.x), dy = Math.sign(target.y - p.y);
+  const options = [];
+  if (dx && dy) options.push([p.x + dx, p.y + dy]);
+  if (dx) options.push([p.x + dx, p.y]);
+  if (dy) options.push([p.x, p.y + dy]);
+  options.push([p.x + 1, p.y], [p.x - 1, p.y], [p.x, p.y + 1], [p.x, p.y - 1]);
+  const dist = ([x, y]) => Math.abs(x - target.x) + Math.abs(y - target.y);
+  const back = p.prev;
+  const ordered = options
+    .filter(([x, y]) => !(back && x === back.x && y === back.y))
+    .sort((a, b) => dist(a) - dist(b));
+  for (const [x, y] of ordered) if (walkStep(S, p, x, y)) return true;
+  if (back && walkStep(S, p, back.x, back.y)) return true;
+  return false;
+}
+
 /** One step along the way. The route is cached on the person and rebuilt when it breaks. */
 function stepToward(S, p, target) {
   if (p.x === target.x && p.y === target.y) { p.nav = null; return false; }
@@ -100,45 +180,33 @@ function stepToward(S, p, target) {
   // Rebuild when the goal changed, or when the cached route has run out without
   // arriving — a stale route must never leave them standing still.
   if (!nav || nav.goal.x !== target.x || nav.goal.y !== target.y || !nav.steps.length) {
-    nav = { goal: { x: target.x, y: target.y }, steps: findRoute(S, p, target) };
+    nav = { goal: { x: target.x, y: target.y }, steps: findRoute(S, p, target, p) };
     p.nav = nav;
   }
   while (nav.steps.length) {
     const k = nav.steps[0];
     const x = k & 127, y = (k - x) / 128;
-    // Crowded; wait a turn, keeping the route. The camp tile is never too crowded —
-    // everyone has to be able to get home, or they jam at the doorway and starve.
-    const isCamp = x === S.camp.x && y === S.camp.y;
-    if (!isCamp && PEOPLE_AT(S, x, y) > 4) return false;
+    // Somebody is standing there. Waiting at a doorway is how a camp starves, so
+    // they step aside and rebuild the route from wherever they end up.
+    if (occupantAt(S, x, y, p)) { p.nav = null; return freeStepToward(S, p, target); }
     nav.steps.shift();
+    p.prev = { x: p.x, y: p.y };
     p.x = x; p.y = y;
     p.pack.food = Math.max(0, p.pack.food - RULES.kcalPerTileWalk);
     p.activity = 'walk';
     return true;
   }
-  // No route at all: take one step that is not water and not where they already
-  // stand. Moving "onto" your own tile is how a person walks in place forever.
-  const dx = Math.sign(target.x - p.x), dy = Math.sign(target.y - p.y);
-  const options = [[p.x + dx, p.y + dy], [p.x + dx, p.y], [p.x, p.y + dy],
-    [p.x + 1, p.y], [p.x - 1, p.y], [p.x, p.y + 1], [p.x, p.y - 1]];
-  for (const [x, y] of options) {
-    if (x === p.x && y === p.y) continue;
-    const t = terrainAt(S.terrain, x, y);
-    if (!t || !walkable(S.terrain, x, y) || t.regionId === 'sea') continue;
-    p.x = x; p.y = y;
-    p.pack.food = Math.max(0, p.pack.food - RULES.kcalPerTileWalk);
-    p.activity = 'walk';
-    return true;
-  }
-  return false;
+  // No route at all: one honest step toward the goal. Moving "onto" your own
+  // tile is how a person walks in place forever.
+  return freeStepToward(S, p, target);
 }
 
 const packMass = p => p.pack.water + p.pack.soil + p.pack.material + p.pack.food / RULES.foodKcalPerKg;
 
 /** Fill up from whatever is underfoot. Only potable water, and only what is left. */
 function drink(S, p) {
-  const tile = terrainAt(S.terrain, p.x, p.y);
-  if (!tile || !(tile.potable > 0)) return false;
+  const tile = reachable(S, p, t => t.potable > 0);
+  if (!tile) return false;
   const room = Math.max(0, RULES.carryKg - packMass(p));
   const want = Math.min(tile.potable, room, 4 * RULES.waterDrinkLDay);
   if (want <= 0.01) return false;
@@ -150,8 +218,8 @@ function drink(S, p) {
 
 /** Gather what is edible underfoot, the same way they drink. */
 function gather(S, p) {
-  const tile = terrainAt(S.terrain, p.x, p.y);
-  if (!tile || !(tile.food > 0)) return false;
+  const tile = reachable(S, p, t => t.food > 0);
+  if (!tile) return false;
   const room = Math.max(0, RULES.carryKg - packMass(p));
   const want = Math.min(tile.food, room * RULES.foodKcalPerKg, 2 * RULES.foodPerPersonDay);
   if (want <= 1) return false;
@@ -161,8 +229,38 @@ function gather(S, p) {
   return true;
 }
 
+/** Haul home what the ground is made of. Nobody assigned this chore; a camp that
+ *  sits idle is a camp that cannot be built up when it matters. */
+function gatherSubstance(S, p, key, maxKg = 6) {
+  const tile = reachable(S, p, t => (t[key] || 0) > 0);
+  if (!tile) return false;
+  const room = Math.max(0, RULES.carryKg - packMass(p));
+  const want = Math.min(tile[key], room, maxKg);
+  if (want <= 0.5) return false;
+  tile[key] -= want;
+  p.pack[key] = (p.pack[key] || 0) + want;
+  p.activity = 'gather';
+  return true;
+}
+
+/**
+ * Not everyone keeps the same hours. Each person's night is seven hours, starting
+ * somewhere between 21:00 and midnight, so the camp is never wholly asleep: there
+ * is always somebody awake to fetch, build, or notice a storm turning.
+ */
+function sleepWindow(S, p) {
+  const i = Math.max(0, S.people.indexOf(p));
+  // Starts ninety minutes apart from 21:00, six hours each, so the night is
+  // covered end to end and the camp is never all asleep at once.
+  const start = (21 * 60 + (i % 5) * 90) % 1440;
+  const end = (start + 360) % 1440;
+  const m = S.minute % 1440;
+  return end > start ? (m >= start && m < end) : (m >= start || m < end);
+}
+
 const outFetching = S => S.people.filter(q => q.alive && q.goal && q.goal.kind === 'water').length;
 const outForaging = S => S.people.filter(q => q.alive && q.goal && q.goal.kind === 'food').length;
+const outHauling = (S, key) => S.people.filter(q => q.alive && q.goal && q.goal.kind === key).length;
 
 const unfinishedNear = (S, p) => {
   let best = null, bestD = Infinity;
@@ -204,10 +302,12 @@ function build(S, p, site, asleep) {
 /** One person's turn. Their own judgement, such as it is. */
 function act(S, p, w, hour) {
   const need = waterNeedL(w.tempC);
-  const atCamp = p.x === S.camp.x && p.y === S.camp.y;
+  // At camp means on the camp tile or beside it: only one person can stand on a
+  // tile, so the doorway has to count as being home.
+  const home = nearCamp(S, p);
   const keep = need * KEEP_DAYS;
   const tile = terrainAt(S.terrain, p.x, p.y);
-  const asleep = hour < 6 || hour >= 21;
+  const asleep = sleepWindow(S, p);
   p.activity = 'idle';
 
   // A storm coming, or already here: get under a roof. The errand waits.
@@ -220,13 +320,25 @@ function act(S, p, w, hour) {
     return;
   }
 
+  // No errand is worth dying on. Anyone away from camp who is running dry drops
+  // what they were doing and goes to water, whatever they had set out to fetch.
+  if (!home && p.pack.water < need * 0.6 && !(p.goal && p.goal.kind === 'water')) {
+    // The nearest spring, or the camp butt if there is no spring in reach: either
+    // one is water, and the errand can wait for a living person.
+    const water = nearestWater(S, p) || (S.camp.stock.water > 0 ? S.camp : null);
+    if (water) { p.goal = { kind: 'water', at: water }; p.activity = 'fetch'; stepToward(S, p, water); return; }
+  }
+
   // ------------------------------------------------------------ an errand, in progress
   if (p.goal && p.goal.kind === 'water') {
     const at = p.goal.at;
-    if (p.x === at.x && p.y === at.y) {
-      if (!drink(S, p)) { p.goal = { kind: 'home' }; return; }
-      const here = terrainAt(S.terrain, p.x, p.y);
-      if (p.pack.water >= keep || !here || !(here.potable > 0)) p.goal = { kind: 'home' };
+    // Drinking distance: the bank of the spring counts, because the water tile
+    // itself may be taken and a pool does not fit one pair of feet.
+    const there = Math.abs(p.x - at.x) <= 1 && Math.abs(p.y - at.y) <= 1;
+    if (there) {
+      const took = drink(S, p);
+      const more = reachable(S, p, t => t.potable > 0);
+      if (!took || p.pack.water >= keep || !more) p.goal = { kind: 'home' };
       return;
     }
     p.activity = 'fetch';
@@ -238,10 +350,11 @@ function act(S, p, w, hour) {
   }
   if (p.goal && p.goal.kind === 'food') {
     const at = p.goal.at;
-    if (p.x === at.x && p.y === at.y) {
-      if (!gather(S, p)) { p.goal = { kind: 'home' }; return; }
-      const here = terrainAt(S.terrain, p.x, p.y);
-      if (p.pack.food >= 2 * RULES.foodPerPersonDay || !here || !(here.food > 0)) p.goal = { kind: 'home' };
+    const there = Math.abs(p.x - at.x) <= 1 && Math.abs(p.y - at.y) <= 1;
+    if (there) {
+      const took = gather(S, p);
+      const more = reachable(S, p, t => t.food > 0);
+      if (!took || p.pack.food >= 2 * RULES.foodPerPersonDay || !more) p.goal = { kind: 'home' };
       return;
     }
     p.activity = 'forage';
@@ -249,8 +362,25 @@ function act(S, p, w, hour) {
     else p.stuck = 0;
     return;
   }
+  // Chores: material and soil, taken from the ground and carried back. The camp
+  // never has to stand still because nobody thought to give them a job.
+  if (p.goal && (p.goal.kind === 'material' || p.goal.kind === 'soil')) {
+    const key = p.goal.kind, at = p.goal.at;
+    const there = Math.abs(p.x - at.x) <= 1 && Math.abs(p.y - at.y) <= 1;
+    if (there) {
+      p.activity = 'gather';
+      gatherSubstance(S, p, key);
+      const more = reachable(S, p, t => (t[key] || 0) > 0);
+      if (!more || p.pack[key] >= 6 || RULES.carryKg - packMass(p) < 1) p.goal = { kind: 'home' };
+      return;
+    }
+    p.activity = 'haul';
+    if (!stepToward(S, p, at)) { p.stuck = (p.stuck || 0) + 1; if (p.stuck > 8) { p.goal = { kind: 'home' }; p.stuck = 0; } }
+    else p.stuck = 0;
+    return;
+  }
   if (p.goal && p.goal.kind === 'home') {
-    if (atCamp) p.goal = null;                        // arrived; fall through
+    if (home) p.goal = null;                          // arrived; fall through
     else {
       p.activity = 'carry';
       if (!stepToward(S, p, S.camp)) { p.stuck = (p.stuck || 0) + 1; if (p.stuck > 12) { p.goal = null; p.stuck = 0; } }
@@ -260,7 +390,7 @@ function act(S, p, w, hour) {
   }
 
   // ----------------------------------------------------------------- away from camp
-  if (!atCamp) {
+  if (!home) {
     if (p.health < 25) { p.goal = { kind: 'home' }; p.activity = 'carry'; stepToward(S, p, S.camp); return; }
     // Thirst first: three days without water and they are dead.
     if (p.pack.water < need * 0.6) {
@@ -280,7 +410,7 @@ function act(S, p, w, hour) {
     if (p.pack.food < RULES.foodPerPersonDay * 0.8) {
       if (tile && tile.food > 0 && gather(S, p)) return;
       const desperate = p.pack.food < RULES.foodPerPersonDay * 0.3;
-      const food = nearestForage(S, p, desperate ? RULES.reachTiles * 6 : RULES.reachTiles);
+      const food = nearestForage(S, p, desperate ? RULES.reachTiles * 6 : 14);
       if (food) { p.goal = { kind: 'food', at: food }; p.activity = 'forage'; stepToward(S, p, food); return; }
       const store = S.structures.find(s => s.built && s.store && s.store.food > 0 &&
         Math.abs(s.x - p.x) + Math.abs(s.y - p.y) <= 1);
@@ -314,24 +444,34 @@ function act(S, p, w, hour) {
     S.camp.stock.food += p.pack.food - foodKeep;
     p.pack.food = foodKeep;
   }
+  // And the material and soil they hauled back goes on the pile.
+  if (p.pack.material > 0.5) { S.camp.stock.material += p.pack.material; p.pack.material = 0; }
+  if (p.pack.soil > 0.5) { S.camp.stock.soil += p.pack.soil; p.pack.soil = 0; }
 
   const alive = Math.max(1, S.people.filter(q => q.alive).length);
 
   // Water is the emergency: a person is dead in three days without it. When the
   // butt is nearly dry, nobody stays behind.
   const waterDays = S.camp.stock.water / (need * alive);
-  const waterCrew = waterDays < 1 ? 5 : 2;
-  if (waterDays < CAMP_DAYS && (!asleep || waterDays < 1) && outFetching(S) < waterCrew) {
+  // An empty larder outranks a shallow butt: nobody fetches water while the food
+  // store is bare, because the walk costs calories the camp does not have.
+  const foodDays = S.camp.stock.food / (RULES.foodPerPersonDay * alive);
+  // A camp that drinks its one spring dry has traded a full butt for a dry grave,
+  // so the crew widens as the butt empties rather than all five setting off.
+  const waterCrew = waterDays < 1 ? 5 : waterDays < 2 ? 3 : 2;
+  if (waterDays < CAMP_DAYS && (!asleep || waterDays < 1) && outFetching(S) < waterCrew
+    && (foodDays >= FOOD_DAYS || waterDays < 1)) {
     const water = nearestWater(S, p);
     if (water) { p.goal = { kind: 'water', at: water }; p.activity = 'fetch'; stepToward(S, p, water); return; }
   }
 
   // Then food: they keep the larder stocked before they lift a finger to build.
   // An empty larder is everyone's problem; a low one is a few people's.
-  const foodDays = S.camp.stock.food / (RULES.foodPerPersonDay * alive);
-  const foodCrew = foodDays < 1 ? 5 : 3;
+  const foodCrew = foodDays < 1 ? 5 : foodDays < 2 ? 4 : 3;
   if (foodDays < FOOD_DAYS && (!asleep || foodDays < 1) && outForaging(S) < foodCrew) {
-    const food = nearestForage(S, p);
+    // Nearer fields first: a twelve-tile walk for food burns what the food was
+    // meant to replace.
+    const food = nearestForage(S, p, 14);
     if (food) { p.goal = { kind: 'food', at: food }; p.activity = 'forage'; stepToward(S, p, food); return; }
   }
 
@@ -353,8 +493,55 @@ function act(S, p, w, hour) {
   const site = unfinishedNear(S, p);
   if (site && build(S, p, site, asleep)) return;
 
-  p.resting = asleep;
-  p.activity = asleep ? 'sleep' : 'idle';
+  // Nothing pressing, and it is not the middle of their night: go and get what
+  // the camp is short of. A camp with no material cannot be built up later, and
+  // standing about is not rest — it is just a slow way to lose the day.
+  if (!asleep && p.pack.food > RULES.foodPerPersonDay * 0.5) {
+    for (const [key, target] of [['material', MATERIAL_KEEP], ['soil', SOIL_KEEP]]) {
+      if (S.camp.stock[key] >= target) continue;
+      if (outHauling(S, key) >= 3) break;         // three at it is enough for one camp
+      // Near camp, and only with food in the pack: a chore is not worth a long
+      // walk on an empty stomach.
+      const at = nearestSubstance(S, p, key, 12);
+      if (at) { p.goal = { kind: key, at }; p.activity = 'haul'; stepToward(S, p, at); return; }
+    }
+  }
+
+  // Comfortable is not finished. While the reserve is only just comfortable one
+  // of them keeps working the surplus: a couple of extra days in the butt is the
+  // difference between a lean week and four graves.
+  if (!asleep && foodDays >= FOOD_DAYS && waterDays < CAMP_DAYS + MORE_DAYS && outFetching(S) < 1) {
+    const water = nearestWater(S, p);
+    if (water) { p.goal = { kind: 'water', at: water }; p.activity = 'fetch'; stepToward(S, p, water); return; }
+  }
+  if (!asleep && foodDays < FOOD_DAYS + MORE_DAYS && outForaging(S) < 1) {
+    const food = nearestForage(S, p, 14);
+    if (food) { p.goal = { kind: 'food', at: food }; p.activity = 'forage'; stepToward(S, p, food); return; }
+  }
+
+  // Nothing pressing. Standing alone in the middle of a camp is not living, so
+  // they go and find somebody: the nearest awake person, and a word with them.
+  // A conversation is not a post, though — half an hour with the same person and
+  // they move on to another, so the camp circulates instead of freezing into a
+  // ring of figures.
+  if (!asleep) {
+    const others = S.people.filter(q => q.alive && q !== p);
+    const near = q => Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
+    const beside = others.find(q => near(q) <= 2);
+    if (p.chatWith !== (beside ? beside.id : null)) { p.chatWith = beside ? beside.id : null; p.chatSince = S.minute; }
+    const longEnough = S.minute - (p.chatSince ?? S.minute) > 30;
+    if (beside && !longEnough) { p.activity = 'talk'; return; }
+    const someone = others
+      .filter(q => !sleepWindow(S, q) && q.id !== (beside ? beside.id : null))
+      .sort((a, b) => near(a) - near(b))[0];
+    if (someone && stepToward(S, p, { x: someone.x, y: someone.y })) { p.activity = 'walk'; return; }
+    p.chatWith = null;
+    p.activity = 'talk';
+    return;
+  }
+
+  p.resting = true;
+  p.activity = 'sleep';
 }
 
 /** Everyone's turn. Called on a fixed interval from `advance`. */
@@ -363,7 +550,14 @@ export function runInstincts(S) {
   const hour = (S.minute % 1440) / 60;
   for (const p of S.people) {
     if (!p.alive) continue;
-    if (p.health < 1.5 && capacity(p) <= 0.16) { p.activity = 'dying'; continue; }
+    if (p.health < 1.5 && capacity(p) <= 0.16) {
+      // Too weak to work, not too weak to try to get home. A dying person who
+      // freezes four tiles out dies of thirst with a full butt behind them,
+      // which is an artefact, not a fact. Crawling is not labour.
+      p.activity = 'dying';
+      if (!nearCamp(S, p)) { stepToward(S, p, S.camp); p.activity = 'dying'; }
+      continue;
+    }
     try { act(S, p, w, hour); } catch { p.activity = 'idle'; }
   }
 }

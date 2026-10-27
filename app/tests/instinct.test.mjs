@@ -122,3 +122,34 @@ test('a starving person walks further for food than a comfortable one', () => {
   advance(S, 1440 * 6);
   assert.ok(S.camp.stock.food > 0 || p.pack.food > 0, 'someone reached the far food');
 });
+
+test('two people never stand on the same tile', () => {
+  const S = createWorld({ seed: 2049 });
+  for (let i = 0; i < 48; i++) {                    // two days, sampled hourly
+    advance(S, 60);
+    const seen = new Map();
+    for (const p of living(S)) {
+      const k = `${p.x},${p.y}`;
+      seen.set(k, (seen.get(k) || 0) + 1);
+    }
+    assert.ok([...seen.values()].every(n => n === 1),
+      `two people shared a tile at minute ${S.minute}: ${JSON.stringify([...seen].filter(([, n]) => n > 1))}`);
+  }
+});
+
+test('the camp is never wholly asleep, and it does not stand about all day', () => {
+  const S = createWorld({ seed: 2049 });
+  const awake = new Set(), busy = new Set();
+  const idleOnly = new Map();
+  for (let i = 0; i < 1440 / 2; i++) {              // one day, every two minutes
+    advance(S, 2);
+    const asleep = living(S).filter(p => p.activity === 'sleep').length;
+    assert.ok(asleep < living(S).length, 'somebody is awake at every hour');
+    for (const p of living(S)) if (p.activity && p.activity !== 'idle' && p.activity !== 'sleep') busy.add(p.name);
+    for (const p of living(S)) {
+      idleOnly.set(p.name, p.activity === 'idle' ? (idleOnly.get(p.name) || 0) + 1 : 0);
+      assert.ok((idleOnly.get(p.name) || 0) < 120, `${p.name} stood still for four hours`);
+    }
+  }
+  assert.ok(busy.size >= 3, 'most of them did something with the day');
+});
