@@ -26,7 +26,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <nav class="dock" aria-label="Controls">
-    <div class="day-bar" title="The current day in the world"><span class="bar" aria-hidden="true"><i id="day-fill"></i></span><span id="day-bar-label" class="mono">Day 1</span></div>
+    <div class="day-bar" id="day-bar" title="The day in the world — drag back through the days the record still holds"><span class="day-track"><span class="bar" aria-hidden="true"><i id="day-fill"></i></span><label for="day-scrub" class="sr-only">The day in the world</label><input id="day-scrub" type="range" min="0" max="0" value="0" step="1"></span><span id="day-bar-label" class="mono">Day 1</span></div>
     <span class="sep"></span>
     <div class="timeline"><label for="scrub" class="sr-only">Time of day</label><input id="scrub" type="range" min="0" max="0" value="0" step="1"><span id="scrub-label" class="mono">Live</span></div>
     <span class="sep"></span>
@@ -34,6 +34,7 @@
     <span class="sep"></span>
     <button class="dock-btn" id="rotate" aria-label="Rotate view" title="Rotate (Q, E)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M12.5 1.8v3h-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>
     <button class="dock-btn" data-panel="people">People</button>
+    <button class="dock-btn" data-panel="talk">Talk</button>
     <button class="dock-btn" data-panel="stock">World</button>
     <button class="dock-btn" data-panel="log">Log</button>
     <button class="dock-btn" id="account-btn">Sign in</button>
@@ -46,6 +47,8 @@
     <div class="panel-head"><h2 id="panel-title"></h2><button class="x" data-close="panel" aria-label="Close">×</button></div>
 
     <section data-view="people"><div id="people-list" class="rows"></div></section>
+
+    <section data-view="talk"><div id="talk" class="talk"></div></section>
 
     <section data-view="stock">
       <div id="stock" class="stock"></div>

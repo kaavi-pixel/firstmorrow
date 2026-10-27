@@ -12,6 +12,11 @@ try { speedChoice = Math.max(1, Math.min(60, Number(localStorage.getItem('fm.spe
 // itself is untouched, and a day is still lived exactly once.
 let following = true;
 const clockOf = m => `${String(Math.floor(Math.max(0, m) / 60)).padStart(2, '0')}:${String(Math.max(0, m) % 60).padStart(2, '0')}`;
+// The day bar is that same idea one order up: dragging it moves the observer's
+// eye across the days the record still holds. The world is not travelled and not
+// rolled back — the top bar keeps telling the truth about now.
+let lookingDay = null;                   // null = the live day
+const dayOf = t => Math.floor((t || 0) / 1440);
 
 function applyViewer(v) {
   viewer = v && typeof v === 'object' ? v : null;
@@ -54,8 +59,7 @@ function apply(p) {
   view.buildings = p.buildings;
   view.inhabitants = p.inhabitants;
   $('day').textContent = `Day ${p.day + 1}`;
-  $('day-bar-label').textContent = `Day ${p.day + 1}`;
-  $('day-fill').style.width = `${Math.min(100, (p.minute / 1439) * 100)}%`;
+  applyDayBar();
   $('time').textContent = p.clock;
   $('since').textContent = `day ${p.day + 1}`;
   $('cap-used').textContent = String(p.summary.dead);
@@ -64,8 +68,42 @@ function apply(p) {
   $('status').classList.toggle('past', s.alive <= 0);
   if (panel === 'stock') renderStock();
   if (panel === 'people') renderPeople();
+  if (panel === 'talk') renderConversations();
   if (panel === 'log') renderLog();
 }
+
+// How far back the world's record actually reaches. The bar can only look at days
+// the payload still carries; past that there is nothing to read, so the range
+// stops there rather than promising days the record has already let go.
+function recordStart() {
+  const p = payload;
+  if (!p) return 0;
+  const times = [...(p.log || []).map(e => e.t), ...(p.council || []).map(m => m.at), ...(p.conversations || []).map(m => m.t)]
+    .filter(t => typeof t === 'number' && t >= 0);
+  return times.length ? dayOf(Math.min(...times)) : p.day;
+}
+
+// The bar states the day you are looking at: the live one, filling as it passes,
+// or a day you have dragged back to — which is over, so it reads full.
+function applyDayBar() {
+  const live = payload ? payload.day : 0;
+  const start = recordStart();
+  if (lookingDay !== null && lookingDay < start) lookingDay = start;
+  const past = lookingDay !== null && lookingDay < live;
+  if (!past) lookingDay = null;
+  const shown = past ? lookingDay : live;
+  const scrub = $('day-scrub');
+  scrub.min = start;
+  scrub.max = live;
+  scrub.value = shown;
+  $('day-bar').classList.toggle('past', past);
+  $('day-bar-label').textContent = past ? `Day ${shown + 1} · back to live` : `Day ${shown + 1}`;
+  $('day-fill').style.width = `${past ? 100 : Math.min(100, (payload ? payload.minute / 1440 : 0) * 100)}%`;
+}
+const refreshDayViews = () => {
+  if (panel === 'log') renderLog();
+  if (panel === 'talk') renderConversations();
+};
 
 const fmt = n => (Math.abs(n) >= 1000 ? Math.round(n).toLocaleString() : (+n).toFixed(1));
 
@@ -89,10 +127,23 @@ function renderStock() {
     <div><dt>Born / died</dt><dd>${s.born} / ${s.dead}</dd></div>
     <div><dt>Storms survived</dt><dd>${s.storms}</dd></div></dl>`;
 }
+function renderConversations() {
+  const day = lookingDay;
+  const words = (payload.conversations || []).filter(m => day === null || dayOf(m.t) === day);
+  const lens = day === null ? '' : `<p class="muted small">Looking back at day ${day + 1} — the world's record keeps only its recent words.</p>`;
+  $('talk').innerHTML = lens + (words.map(m => `
+    <div class="talk-item ${m.kind}">
+      <div class="muted small">${esc(m.speaker)} <span class="talk-to">to ${esc(m.target)}</span> · ${m.kind === 'agents' ? 'agent' : 'person'}</div>
+      <p>${esc(m.text)}</p>
+    </div>`).join('') || `<p class="muted small">${day === null ? 'Nobody has said anything yet.' : `Nothing from day ${day + 1} is in the world's record.`}</p>`);
+}
 function renderLog() {
-  const council = (payload.council || []).map(m => `<li class="council"><span class="muted small">${m.name}</span> ${m.text}</li>`).join('');
-  const events = payload.log.map(e => `<li><span class="muted small">day ${Math.floor((e.t || 0) / 1440) + 1}</span> ${e.text}</li>`).join('');
-  $('log').innerHTML = council + events;
+  const day = lookingDay;                       // null = the live day
+  const here = t => day === null || dayOf(t) === day;
+  const council = (payload.council || []).filter(m => here(m.at)).map(m => `<li class="council"><span class="muted small">${m.name}</span> ${m.text}</li>`).join('');
+  const events = payload.log.filter(e => here(e.t)).map(e => `<li><span class="muted small">day ${dayOf(e.t) + 1}</span> ${e.text}</li>`).join('');
+  const lens = day === null ? '' : `<li class="lens"><span class="muted small">day ${day + 1}</span> Looking back — the world's record keeps only its recent events.</li>`;
+  $('log').innerHTML = lens + (council + events || `<li class="muted small">Nothing from day ${day + 1} is in the world's record.</li>`);
 }
 function openPanel(name) {
   panel = panel === name ? null : name;
@@ -100,10 +151,11 @@ function openPanel(name) {
   document.querySelectorAll('[data-view]').forEach(s => { s.hidden = s.dataset.view !== panel; });
   document.querySelectorAll('[data-panel]').forEach(b => b.classList.toggle('on', b.dataset.panel === panel));
   if (!panel) return;
-  $('panel-title').textContent = { people: 'People', stock: 'World', log: 'Log', settings: 'About', account: 'Account' }[panel];
+  $('panel-title').textContent = { people: 'People', talk: 'Talk', stock: 'World', log: 'Log', settings: 'About', account: 'Account' }[panel];
   if (panel === 'people') renderPeople();
   if (panel === 'stock') renderStock();
   if (panel === 'log') renderLog();
+  if (panel === 'talk') renderConversations();
   if (panel === 'account') renderAccount();
 }
 
@@ -138,6 +190,21 @@ $('scrub-label').addEventListener('click', () => {
   following = true;
   $('scrub').closest('.timeline')?.classList.remove('past');
   if (payload) { view.minute = payload.minute; $('scrub').value = payload.minute; $('scrub-label').textContent = `Live ${payload.clock}`; }
+});
+// Dragging the day bar looks along the days, not through them: you are reading
+// the record, and the world is untouched. Tapping the label returns to live.
+$('day-scrub').addEventListener('input', e => {
+  const live = payload ? payload.day : 0;
+  const v = Math.max(recordStart(), Math.min(live, Number(e.target.value) || 0));
+  lookingDay = v >= live ? null : v;
+  applyDayBar();
+  refreshDayViews();
+});
+$('day-bar-label').addEventListener('click', () => {
+  if (lookingDay === null) return;
+  lookingDay = null;
+  applyDayBar();
+  refreshDayViews();
 });
 $('begin').addEventListener('click', () => { $('welcome').hidden = true; try { localStorage.setItem('fm.entered', '1'); } catch {} });
 $('theme').addEventListener('click', () => {
@@ -179,8 +246,11 @@ const DOING = {
   idle: 'standing about', walk: 'walking', fetch: 'fetching water', drink: 'drinking',
   forage: 'foraging for food', carry: 'carrying a load home', eat: 'eating', build: 'building',
   shelter: 'sheltering', cower: 'cowering in the open', sleep: 'asleep', 'no-water': 'looking for water',
+  gather: 'gathering material', haul: 'hauling it home', talk: 'talking', dying: 'dying',
 };
 const bar = v => `<span class="bar"><i style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%"></i></span>`;
+const recentWords = id => (payload.conversations || []).filter(m => m.speakerId === id).slice(0, 2)
+  .map(m => `<p class="quote">“${esc(m.text)}”<span class="muted small"> to ${esc(m.target)}</span></p>`).join('');
 
 // Every clickable thing answers with a card. A person, an author, and the thing
 // an author designed all have one; clicking empty ground closes it.
@@ -209,7 +279,8 @@ function showPerson(card, id) {
       <span class="tag">${p.carrying.food.toLocaleString()} kcal</span>
       ${p.pregnant ? '<span class="tag">pregnant</span>' : ''}
       ${p.children ? `<span class="tag">${p.children} children</span>` : ''}
-    </div>`;
+    </div>
+    ${recentWords(p.id)}`;
   paintPerson(card.querySelector('canvas'), p);
   card.hidden = false;
 }
@@ -229,6 +300,7 @@ function showAgent(card, id) {
       <span class="tag">${a.calls} calls spent</span>
     </div>
     ${mine.length ? `<div class="tags">${mine.map(b => `<span class="tag">${esc(b.name)}</span>`).join('')}</div>` : ''}
+    ${recentWords(a.id)}
     ${a.design ? `<details><summary>Its latest code</summary><pre>${esc(a.design)}</pre></details>` : ''}`;
   paintAgent(card.querySelector('canvas'), a);
   card.hidden = false;
