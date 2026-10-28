@@ -6,28 +6,18 @@
 // is reserved for the later island work (design/islands-and-boats.md) — reserved,
 // not implemented.
 
-export const TILE_M = 8;
+import { TILE_M, REGIONS, region } from './regions.mjs';
+
+// Re-exported so every existing reader of this file keeps its import unchanged:
+// regions.mjs is the definition, this is one of its consumers.
+export { TILE_M, REGIONS, region };
+
 export const GEO_VERSION = 1;
 export const BOUNDS = Object.freeze({ minX: 0, minY: 0, maxX: 47, maxY: 39 });
 export const START = Object.freeze({ x: 13, y: 21 });
 // A visible spring three tiles from camp: finite, drinkable, and the only water
 // anyone can see when they arrive.
 export const OASIS = Object.freeze({ x: START.x + 3, y: START.y - 2 });
-
-// Regions differ across several dimensions and no region leads in all of them.
-// `drink` is the fraction of a tile's water reserve that is potable. `food` is
-// what can be foraged by hand: scrub and bush country feeds people, bare rock
-// does not. It is finite, like everything else here.
-export const REGIONS = Object.freeze([
-  { id: 'sea', name: 'Sea', color: '#41637a', water: 0, soil: 0, material: 0, exposure: 1, drink: 0, food: 0, walk: false },
-  { id: 'coast', name: 'Coast', color: '#bfae80', water: 95, soil: 24, material: 14, exposure: 0.45, drink: 0.5, food: 2500, walk: true },
-  { id: 'scrub', name: 'Scrub', color: '#b99f6d', water: 36, soil: 12, material: 38, exposure: 0.72, drink: 0.35, food: 5000, walk: true },
-  { id: 'interior', name: 'Interior', color: '#d5b07e', water: 7, soil: 3, material: 80, exposure: 1, drink: 0, food: 400, walk: true },
-  { id: 'rock', name: 'Rock', color: '#a39684', water: 4, soil: 1, material: 280, exposure: 0.86, drink: 0, food: 80, walk: true },
-]);
-
-const regionById = new Map(REGIONS.map(r => [r.id, r]));
-export const region = id => regionById.get(id);
 
 function hash(x, y, seed) {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed | 0, 2246822519);

@@ -17,7 +17,7 @@
 // adjacency, the exact tiling (adjacent cells share corners and the facing cells
 // cover the disk once), the campsite, the spring, and the walk budget.
 
-import { REGIONS, region, TILE_M } from './terrain.mjs';
+import { REGIONS, region, TILE_M } from './regions.mjs';
 
 export const GEO_VERSION_SPHERE = 2;
 export const CELL_M = TILE_M;
