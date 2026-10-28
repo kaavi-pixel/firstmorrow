@@ -6,7 +6,7 @@
 // person has not been near. Most importantly it is handed the boundary: the
 // rules of reality it may work inside but never change.
 
-import { terrainAt, region } from '../public/terrain.mjs';
+import { terrainAt, region, cellsWithin } from '../public/terrain.mjs';
 import { RULES, SUBSTANCES, waterNeedL } from './validate.mjs';
 import { living, shelterCount, dayIndex, minuteOfDay, hourOfDay } from './world.mjs';
 import { weatherOn, WEATHER } from './weather.mjs';
@@ -18,7 +18,8 @@ export function rulesBrief() {
   return [
     'REALITY — fixed, and not yours to change. Work inside it.',
     'You are not alone here. Other authors share this world and this channel. Work with them.',
-    `Matter is finite. Water, soil and material are drawn from a tile and never return: ${SUBSTANCES.join(', ')}.`,
+    'The world is a planet of hexagonal cells, not a grid. There is no x and no y: a place is a cell id, and a structure is proposed at one with { at: id }. A cell has six neighbours, or five on one of the twelve pentagons, and every distance here is counted in steps over those neighbours. You are shown the cells around camp and their ids in "observed".',
+    `Matter is finite. Water, soil and material are drawn from a cell and never return: ${SUBSTANCES.join(', ')}.`,
     'Nothing comes from nothing. Every process is mass-checked: output mass may never exceed input mass.',
     `Bodies: a person needs ${RULES.waterDrinkLDay} L of drinking water a day at 20 C, and more in the heat — about ${waterNeedL(40).toFixed(1)} L at 40 C. And ${RULES.foodPerPersonDay} kcal a day. A person can carry ${RULES.carryKg} kg.`,
     `Water is the fast killer: without it, about ${RULES.daysToDieWithoutWater} days. Food is the slow one: about ${RULES.daysToDieWithoutFood} days. Children under five and people over sixty go first.`,
@@ -31,6 +32,7 @@ export function rulesBrief() {
     'The people act for themselves — they will walk to water they can see, gather food when the larder is low, drink and eat before they build, and take cover from a storm. They cannot invent, build or plan. That is your work.',
     `People age, and die of it. They can conceive and bear children, but only while they are healthy and there is food.`,
     'There is no rescue. No free materials, no repair, no rollback, no bringing back the dead.',
+    `You may design only within ${RULES.writTiles} cells of camp. The camp is the camp cell and the six beside it, and they have to stay clear.`,
     'You may build anything reality permits. You may change nothing about reality.',
   ].join('\n');
 }
@@ -39,12 +41,12 @@ export function rulesBrief() {
 export function structureEnv(S, s) {
   const day = dayIndex(S);
   const w = weatherOn(S.weather, day);
-  const t = terrainAt(S.terrain, s.x, s.y);
+  const t = terrainAt(S.terrain, s.at);
   return {
     day,
     time: { hour: +hourOfDay(S).toFixed(1), season: w.season, tempC: w.tempC, stormToday: !!w.storm, stormSeverity: w.storm?.severity ?? 0 },
-    structure: { id: s.id, name: s.name, x: s.x, y: s.y, shelter: s.shelter || 0 },
-    here: { x: s.x, y: s.y, region: t?.regionId, water: t?.potable || 0, food: t?.food || 0, soil: t?.soil || 0, material: t?.material || 0 },
+    structure: { id: s.id, name: s.name, at: s.at, shelter: s.shelter || 0 },
+    here: { at: s.at, region: t?.regionId, water: t?.potable || 0, food: t?.food || 0, soil: t?.soil || 0, material: t?.material || 0 },
     camp: {
       stock: { ...S.camp.stock },
       people: living(S).map(p => ({
@@ -63,16 +65,14 @@ export function authorView(S, authorId) {
   const w = weatherOn(S.weather, day);
   const camp = S.camp;
 
-  // Survey: the ground around camp, as the author has actually walked it.
+  // Survey: the ground around camp, as the author has actually walked it. On a
+  // planet this is a hex ball of cells rather than a square of coordinates, and it
+  // comes out of the walk itself, so it can never be a shape the world is not.
   const observed = [];
-  for (let y = camp.y - SURVEY_TILES; y <= camp.y + SURVEY_TILES; y++) {
-    for (let x = camp.x - SURVEY_TILES; x <= camp.x + SURVEY_TILES; x++) {
-      const t = terrainAt(S.terrain, x, y);
-      if (!t) continue;
-      const d = Math.hypot(x - camp.x, y - camp.y);
-      if (d > SURVEY_TILES) continue;
-      observed.push({ x, y, region: t.regionId, water: t.potable || 0, food: t.food || 0, soil: t.soil || 0, material: t.material || 0 });
-    }
+  for (const [at, d] of cellsWithin(S.terrain, camp.at, SURVEY_TILES)) {
+    const t = terrainAt(S.terrain, at);
+    if (!t) continue;
+    observed.push({ at, steps: d, region: t.regionId, water: t.potable || 0, food: t.food || 0, soil: t.soil || 0, material: t.material || 0 });
   }
 
   return {
@@ -81,7 +81,7 @@ export function authorView(S, authorId) {
     council: (S.council || []).slice(-24).map(m => ({ from: m.name, at: m.t, said: m.text })),
     time: { day, minuteOfDay: minuteOfDay(S), hour: +hourOfDay(S).toFixed(1), season: w.season, tempC: w.tempC, stormToday: !!w.storm, stormSeverity: w.storm?.severity ?? 0 },
     camp: {
-      x: camp.x, y: camp.y,
+      at: camp.at,
       stock: { ...camp.stock },
       shelterPlaces: shelterCount(S),
       people: living(S).map(p => ({
@@ -91,7 +91,7 @@ export function authorView(S, authorId) {
         activity: p.activity || null,
       })),
     },
-    standing: S.structures.map(s => ({ id: s.id, name: s.name, x: s.x, y: s.y, mass: s.mass, shelter: s.shelter, built: s.built, progressHours: s.progressHours, laborHours: s.laborHours, authorId: s.authorId, program: s.program || null })),
+    standing: S.structures.map(s => ({ id: s.id, name: s.name, at: s.at, mass: s.mass, shelter: s.shelter, built: s.built, progressHours: s.progressHours, laborHours: s.laborHours, authorId: s.authorId, program: s.program || null })),
     observed,
     dead: S.graveyard.map(g => ({ name: g.name, at: g.at, cause: g.cause })),
     boundary: rulesBrief(),

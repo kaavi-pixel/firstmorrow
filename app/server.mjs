@@ -7,7 +7,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createWorld } from './kernel/world.mjs';
 import { createService, memoryStore } from './kernel/store.mjs';
-import { livePayload } from './kernel/payload.mjs';
+import { livePayload, cellCard } from './kernel/payload.mjs';
 import { createCaller } from './kernel/provider.mjs';
 import { structureEnv } from './kernel/capability.mjs';
 import { runProgram } from './kernel/sandbox.mjs';
@@ -16,6 +16,9 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(here, 'public');
 const PORT = Number(process.env.PORT || 3000);
 const SEED = Number(process.env.FM_SEED || 2049);
+// The level, read where environments live. `public/terrain.mjs` must never read one:
+// every client import of it would die on `process is not defined`.
+const SUBDIVISIONS = Math.max(1, Number(process.env.FM_SUBDIVISIONS || 14));
 
 const caller = process.env.PPLX_API_KEY
   ? createCaller({
@@ -29,7 +32,7 @@ const caller = process.env.PPLX_API_KEY
 
 const service = createService({
   store: memoryStore(),
-  build: () => createWorld({ seed: SEED }),
+  build: () => createWorld({ seed: SEED, subdivisions: SUBDIVISIONS }),
   caller,
   run: (code, s, S) => runProgram(code, structureEnv(S, s), SEED),
 });
@@ -45,6 +48,15 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify(livePayload(state)));
       // The authors get their turn after the visitor has their answer.
       service.maybeAuthorTurn().catch(() => {});
+      return;
+    }
+    // One clicked hexagon. `ensure` rather than `tick`: reading the map must not spend
+    // the world's time, and the browser asks per cell, never per poll.
+    if (url.pathname === '/api/cell') {
+      const state = await service.ensure();
+      const card = cellCard(state, url.searchParams.get('id'));
+      res.writeHead(card ? 200 : 404, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(card ? { cell: card } : { error: 'no such cell', id: url.searchParams.get('id') }));
       return;
     }
     if (url.pathname === '/api/reset') {

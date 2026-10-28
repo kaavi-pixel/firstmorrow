@@ -4,7 +4,7 @@
 // real weather, and permanent outcomes. Nothing in this file is authored by a
 // model, and nothing in it may be changed by one.
 
-import { createTerrain, terrainAt, region, START, OASIS } from '../public/terrain.mjs';
+import { createTerrain, terrainAt, region, walkable, beside, neighbours, cellsWithin, campCells, SUBDIVISIONS } from '../public/terrain.mjs';
 import { RULES, massOf, applyDeclarations, waterNeedL, fragility } from './validate.mjs';
 import { createWeather, advanceWeather, weatherOn, stormEffect, WEATHER } from './weather.mjs';
 import { runInstincts, INSTINCT_MINUTES } from './instinct.mjs';
@@ -33,12 +33,12 @@ const NAMES_POOL = ['Ora', 'Bram', 'Lise', 'Teo', 'Nell', 'Kai', 'Juno', 'Fenn',
 const HAIR = ['#574130', '#303a35', '#574638', '#4c3529', '#424443', '#6b5240'];
 const SKIN_HUES = ['#c58b5e', '#81987f', '#bdad77', '#7e9ea5', '#ac8587'];
 
-export function createWorld({ seed = 2049, now = Date.now(), reserveDays = 4 } = {}) {
-  const terrain = createTerrain(seed);
+export function createWorld({ seed = 2049, now = Date.now(), reserveDays = 4, subdivisions = SUBDIVISIONS } = {}) {
+  const terrain = createTerrain(seed, subdivisions);
   const S = {
     version: 1, seed, startedAt: now, minute: 0,
     terrain,
-    camp: { x: START.x, y: START.y, stock: { water: 0, food: 0, material: 0, soil: 0 } },
+    camp: { at: terrain.camp, stock: { water: 0, food: 0, material: 0, soil: 0 } },
     people: [], authors: [], structures: [], log: [], graveyard: [],
     weather: createWeather(seed),
     births: 0, deaths: 0, storms: 0,
@@ -53,24 +53,23 @@ export function createWorld({ seed = 2049, now = Date.now(), reserveDays = 4 } =
   S.camp.stock.material = 40;
   S.camp.stock.soil = 12;
 
-  // They arrive as five people, not one pile: one body to a tile from the first
-  // tick, so the occupancy rule is never something the world has to repair.
-  const ARRIVAL = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
-  const berth = i => {
-    const [dx, dy] = ARRIVAL[i % ARRIVAL.length];
-    const t = terrainAt(terrain, START.x + dx, START.y + dy);
-    const ok = t && t.regionId !== 'sea' && region(t.regionId).walk;
-    return ok ? { x: START.x + dx, y: START.y + dy } : { x: START.x, y: START.y };
-  };
+  // They arrive as five people, not one pile: one body to a cell from the first
+  // tick, so the occupancy rule is never something the world has to repair. The
+  // berths are the camp cell and the land beside it — six neighbours, five on a
+  // pentagon, which is why the camp is a seven-cell place and not a cell and its
+  // eight. There is no ARRIVAL offset table any more, because there is no origin
+  // to offset from.
+  const berths = [terrain.camp, ...neighbours(terrain, terrain.camp).filter(at => walkable(terrain, at))];
+  const berth = i => berths[i % berths.length];
   S.people = PEOPLE.map((p, i) => ({
-    ...p, kind: 'person', x: berth(i).x, y: berth(i).y, alive: true, health: 100,
+    ...p, kind: 'person', at: berth(i), alive: true, health: 100,
     age: p.age, bornAt: -Math.round(p.age * 365 * MINUTES_PER_DAY),
     pack: { water: 0, food: 0, material: 0, soil: 0 },
     labor: { day: -1, used: 0 }, resting: false, say: null, saidAt: -1,
     starving: 0, pregnant: null, children: 0, cause: null,
   }));
   S.authors = AUTHORS.map(a => ({
-    ...a, kind: 'author', x: START.x - AUTHORS.indexOf(a), y: START.y - 1, alive: true,
+    ...a, kind: 'author', at: terrain.camp, alive: true,
     labor: { day: -1, used: 0 }, say: null, saidAt: -1, calls: 0, lastProgram: null,
   }));
   S.council = [];
@@ -80,18 +79,19 @@ export function createWorld({ seed = 2049, now = Date.now(), reserveDays = 4 } =
 }
 
 export const living = S => S.people.filter(p => p.alive);
-// The camp is a place, not a tile. Only one body can stand on a tile, so "at
-// camp" is the camp tile or any of the eight around it — otherwise four of five
+// The camp is a place, not a cell. Only one body can stand on a cell, so "at
+// camp" is the camp cell or one of the six beside it — otherwise four of five
 // people queue outside their own water butt and die of thirst beside it.
-export const atCamp = (S, p) =>
-  Math.abs(p.x - S.camp.x) <= 1 && Math.abs(p.y - S.camp.y) <= 1;
+export const atCamp = (S, p) => campCells(S.terrain).has(p.at);
 
-// Shelter that actually stands, within reach of a tile.
-export function shelterAt(S, x, y) {
+// Shelter that actually stands, within reach of a cell. The old test was a
+// square of side 2r+1; on cells it is the hex ball of radius `shelterRadius`.
+export function shelterAt(S, at) {
+  const near = cellsWithin(S.terrain, at, WEATHER.shelterRadius);
   let best = 0;
   for (const s of S.structures) {
     if (!s.built || !s.shelter) continue;
-    if (Math.abs(s.x - x) <= WEATHER.shelterRadius && Math.abs(s.y - y) <= WEATHER.shelterRadius) best = Math.max(best, s.shelter);
+    if (near.has(s.at)) best = Math.max(best, s.shelter);
   }
   return best;
 }
@@ -138,24 +138,19 @@ function newDay(S, day) {
       if (day >= p.pregnant.due) {
         const parent = living(S).length >= 1;
         if (parent && foodDays > 1) {
-          // One person to a tile: the newborn takes the first free tile beside
+          // One person to a cell: the newborn takes the first free cell beside
           // its parent, and only shares the parent's own if the ground is full.
-          const free = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]]
-            .map(([dx, dy]) => ({ x: p.x + dx, y: p.y + dy }))
-            .find(s => {
-              const t = terrainAt(S.terrain, s.x, s.y);
-              if (!t || t.regionId === 'sea') return false;
-              return !S.people.some(q => q.alive && q.x === s.x && q.y === s.y);
-            });
+          const free = [p.at, ...neighbours(S.terrain, p.at)]
+            .find(at => walkable(S.terrain, at) && !S.people.some(q => q.alive && q.at === at));
           const child = {
             id: `c${S.births + 1}`, kind: 'person',
             name: NAMES_POOL[(S.births + S.seed) % NAMES_POOL.length],
             color: SKIN_HUES[(S.births + 2) % SKIN_HUES.length],
             hair: HAIR[(S.births + 1) % HAIR.length],
             values: ['Born here'], wish: 'unknown yet',
-            // A newborn takes a tile of their own: one body to a tile, even a
-            // small one. The nearest free tile in the camp, or their parent's.
-            x: (free || { x: p.x, y: p.y }).x, y: (free || { x: p.x, y: p.y }).y,
+            // A newborn takes a cell of their own: one body to a cell, even a
+            // small one. The nearest free cell, or their parent's.
+            at: free ?? p.at,
             alive: true, health: 100, age: 0, bornAt: S.minute,
             pack: { water: 0, food: 0, material: 0, soil: 0 },
             labor: { day, used: 0 }, resting: false, say: null, saidAt: -1,
@@ -206,8 +201,8 @@ function resolveStorm(S, storm) {
   }
   // Anyone out in it, and not under a roof, pays for it.
   for (const p of living(S)) {
-    if (shelterAt(S, p.x, p.y) > 0) continue;
-    const t = terrainAt(S.terrain, p.x, p.y);
+    if (shelterAt(S, p.at) > 0) continue;
+    const t = terrainAt(S.terrain, p.at);
     const exposure = region(t?.regionId)?.exposure ?? 1;
     const hours = 3; // a storm passes through
     p.health = Math.max(0, p.health - WEATHER.exposureDamagePerHour * hours * exposure);
@@ -246,18 +241,18 @@ export function advance(S, minutes, { onProgram = null, run = null } = {}) {
     const needF = RULES.foodPerPersonDay / MINUTES_PER_DAY;
     const perDayNoWater = 100 / RULES.daysToDieWithoutWater;
     const perDayNoFood = 100 / RULES.daysToDieWithoutFood;
+    const camp = campCells(S.terrain);
     for (const p of living(S)) {
-      // Home is the camp tile and the ground around it: only one person can stand
-      // on a tile, so the camp's stores must feed the doorway too, or everyone
+      // Home is the camp cell and the ground around it: only one person can stand
+      // on a cell, so the camp's stores must feed the doorway too, or everyone
       // else would have to carry their own water to survive standing at home.
-      const nearStore = Math.abs(p.x - S.camp.x) <= 1 && Math.abs(p.y - S.camp.y) <= 1;
+      const nearStore = camp.has(p.at);
       const store = nearStore ? S.camp.stock : p.pack;
       // Water an author's structure made counts as water at home: a still built
       // beside the camp is drunk from, or the camp would die of thirst next to a
       // full butt it could not reach. Food is still the camp's own.
       const tap = nearStore
-        ? S.structures.find(s => s.built && s.store && s.store.water > 0 &&
-            Math.abs(s.x - p.x) + Math.abs(s.y - p.y) <= 1)
+        ? S.structures.find(s => s.built && s.store && s.store.water > 0 && beside(S.terrain, s.at, p.at))
         : null;
       let gotW = Math.min(store.water || 0, needW);
       store.water = Math.max(0, (store.water || 0) - gotW);
@@ -283,7 +278,7 @@ export function advance(S, minutes, { onProgram = null, run = null } = {}) {
         p.thirst = Math.max(0, (p.thirst || 0) - 1 / MINUTES_PER_DAY);
         p.starving = Math.max(0, p.starving - 1 / MINUTES_PER_DAY);
         // Recovery is slow: weeks, not days, and better under a roof.
-        p.health = Math.min(100, p.health + ((shelterAt(S, p.x, p.y) > 0 ? 4 : 2.5) / MINUTES_PER_DAY));
+        p.health = Math.min(100, p.health + ((shelterAt(S, p.at) > 0 ? 4 : 2.5) / MINUTES_PER_DAY));
       }
     }
 
@@ -302,7 +297,7 @@ export function runStructures(S, day, { run = null } = {}) {
   for (const s of S.structures) {
     if (!s.built || !s.program) continue;
     const actor = s.proxy || (s.proxy = {
-      id: s.id, name: s.name, kind: 'structure', x: s.x, y: s.y,
+      id: s.id, name: s.name, kind: 'structure', at: s.at,
       alive: true, health: 100, pack: { water: 0, food: 0, material: 0, soil: 0 },
       labor: { day, used: 0 }, authorId: s.authorId, say: null,
     });

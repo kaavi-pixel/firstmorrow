@@ -11,7 +11,7 @@ import { createWorld, advance, living, dayIndex, MINUTES_PER_DAY } from '../kern
 import { authorTurn, runAuthorTurn, nextAuthor, budget, parseAuthorReply, CALLS_PER_REAL_DAY } from '../kernel/authors.mjs';
 import { authorView, structureEnv } from '../kernel/capability.mjs';
 import { createService, memoryStore } from '../kernel/store.mjs';
-import { terrainAt, walkable } from '../public/terrain.mjs';
+import { terrainAt } from '../public/terrain.mjs';
 import { runProgram } from '../kernel/sandbox.mjs';
 
 const NOW = Date.UTC(2026, 9, 26, 9, 0, 0);
@@ -19,14 +19,15 @@ const NOW = Date.UTC(2026, 9, 26, 9, 0, 0);
 /** A stand-in for a model: it answers with exactly this. */
 const says = payload => async () => ({ text: typeof payload === 'string' ? payload : JSON.stringify(payload) });
 
-/** A walkable tile within survey range of camp, with something in the ground. */
+/** A walkable cell within survey range of camp, with something in the ground.
+ *  The survey is a hex ball of cells now, so it carries `at` and `steps`. */
 function spotNear(S, authorId = S.authors[0].id) {
   const v = authorView(S, authorId);
   const t = v.observed.find(t =>
-    walkable(S.terrain, t.x, t.y) && t.material > 0 &&
-    !(t.x === S.camp.x && t.y === S.camp.y) &&
-    Math.abs(t.x - S.camp.x) + Math.abs(t.y - S.camp.y) <= 16 &&
-    !S.structures.some(s => s.x === t.x && s.y === t.y));
+    t.region !== 'sea' && t.material > 0 &&
+    t.at !== S.camp.at &&
+    t.steps <= 16 &&
+    !S.structures.some(s => s.at === t.at));
   assert.ok(t, 'the survey should offer somewhere to build');
   return t;
 }
@@ -36,7 +37,7 @@ const runner = (code, s, S) => runProgram(code, structureEnv(S, s), 1);
 // ---------------------------------------------------------------- the reply
 
 test('the reply is dug out of whatever the model wrapped it in', () => {
-  const body = { think: 'water first', tell: 'digging', build: { name: 'Well', description: 'A well, so the camp has water within reach of the tents.', x: 3, y: 4, mass: 12, form: 'hut', program: 'return {labor: 1};' } };
+  const body = { think: 'water first', tell: 'digging', build: { name: 'Well', description: 'A well, so the camp has water within reach of the tents.', at: 3, mass: 12, form: 'hut', program: 'return {labor: 1};' } };
   for (const wrapped of [
     JSON.stringify(body),
     '```json\n' + JSON.stringify(body) + '\n```',
@@ -55,7 +56,7 @@ test('an unusable reply is refused rather than guessed at', () => {
   assert.throws(() => parseAuthorReply('{oops'), /no JSON object|valid JSON/);
   assert.throws(() => parseAuthorReply('[1,2,3]'), /no JSON object|not an object/);
   assert.throws(() => parseAuthorReply('{"build":"a hut"}'), /must be an object or null/);
-  assert.throws(() => parseAuthorReply(JSON.stringify({ build: { x: 1, y: 1, mass: 5, form: 'hut', sprite: ['short'] } })), /16×16|16/);
+  assert.throws(() => parseAuthorReply(JSON.stringify({ build: { at: 1, mass: 5, form: 'hut', sprite: ['short'] } })), /16×16|16/);
 });
 
 test('an author may say nothing is worth building yet', () => {
@@ -96,7 +97,7 @@ test('an author proposes, the gate accepts, and the structure is theirs', async 
     call: says({
       think: 'they need a roof before the first storm',
       tell: 'Engineer, I am starting a lean-to.',
-      build: { name: 'Lean-to', description: 'A lean-to, so three people have a roof before the first storm.', x: spot.x, y: spot.y, mass: 9, form: 'hut', shelter: 3, program: 'return { labor: 1, draw: { material: 1 } };' },
+      build: { name: 'Lean-to', description: 'A lean-to, so three people have a roof before the first storm.', at: spot.at, mass: 9, form: 'hut', shelter: 3, program: 'return { labor: 1, draw: { material: 1 } };' },
     }),
     now: NOW,
   });
@@ -118,7 +119,7 @@ test('an author proposes, the gate accepts, and the structure is theirs', async 
 test('a design that breaks reality is refused, and the author is told why', async () => {
   const S = createWorld();
   const spot = spotNear(S);
-  const bad = { build: { name: 'Longhouse', description: 'A longhouse that shelters more people than its mass can hold.', x: spot.x, y: spot.y, mass: 9, form: 'hut', shelter: 5 } };
+  const bad = { build: { name: 'Longhouse', description: 'A longhouse that shelters more people than its mass can hold.', at: spot.at, mass: 9, form: 'hut', shelter: 5 } };
 
   const first = await authorTurn(S, { call: says(bad), now: NOW });
   assert.equal(first.status, 'refused');
@@ -157,11 +158,15 @@ test('an unusable answer is a wasted day, not a crash', async () => {
 test('what an author designs is built by hand, and then runs once a day', async () => {
   const S = createWorld();
   const spot = spotNear(S);
-  const standing = () => terrainAt(S.terrain, spot.x, spot.y).material;
+  // The camp's own chores work the ground beside it, so a cell that is to still
+  // have something in it after four days of building has to be given something to
+  // lose: on the planet the camp's neighbourhood is the first thing stripped.
+  S.terrain.tiles.get(spot.at).material = 600;
+  const standing = () => terrainAt(S.terrain, spot.at).material;
 
   await authorTurn(S, {
     call: says({ think: 'a hole in the ground', tell: 'digging here', build: {
-      name: 'Dig', description: 'A shallow dig, to pull material out of the ground underfoot.', x: spot.x, y: spot.y, mass: 6, form: 'hut',
+      name: 'Dig', description: 'A shallow dig, to pull material out of the ground underfoot.', at: spot.at, mass: 6, form: 'hut',
       program: 'return { labor: 1, draw: { material: 1 } };' } }),
     now: NOW,
   });

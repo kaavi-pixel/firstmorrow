@@ -3,11 +3,12 @@
 // what is actually happening, and addressed to someone, so the camp sounds alive.
 import { weatherOn } from './weather.mjs';
 import { waterNeedL } from './validate.mjs';
+import { cellDistance } from '../public/terrain.mjs';
 
 const DAY = 1440;
 const living = S => S.people.filter(p => p.alive);
 const dayIndex = S => Math.floor(S.minute / DAY);
-const distance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+const distance = (S, a, b) => cellDistance(S.terrain, a.at, b.at);
 const clampDays = n => Math.max(0, n).toFixed(1);
 
 const VOICE = {
@@ -340,7 +341,7 @@ function personExchange(S, turn) {
   if (people.length < 2) return false;
   const speaker = people[turn % people.length];
   const target = [...people].filter(p => p.id !== speaker.id)
-    .sort((a, b) => distance(a, speaker) - distance(b, speaker) || a.id.localeCompare(b.id))[0];
+    .sort((a, b) => distance(S, a, speaker) - distance(S, b, speaker) || a.id.localeCompare(b.id))[0];
   const topic = topicFor(S, weatherOn(S.weather, dayIndex(S)), turn);
   const variant = Math.floor(turn / 2) % 3;
   say(S, 'people', speaker, target, naturalAddress(S, target.name, OPENERS[topic][variant](S, speaker, target)));

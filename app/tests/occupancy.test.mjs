@@ -1,17 +1,18 @@
-// One human to a tile — and people who are not standing about.
+// One human to a cell — and people who are not standing about.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, living } from '../kernel/world.mjs';
+import { cellsWithin, neighbours, walkable } from '../public/terrain.mjs';
 
-const key = t => t.y * 128 + t.x;
+const key = p => p.at;
 
-test('five people arrive on five tiles, not one', () => {
+test('five people arrive on five cells, not one', () => {
   const S = createWorld({ seed: 2049 });
-  const tiles = new Set(living(S).map(key));
-  assert.equal(tiles.size, 5, 'every arrival has a tile of their own');
+  const cells = new Set(living(S).map(key));
+  assert.equal(cells.size, 5, 'every arrival has a cell of their own');
 });
 
-test('no two people ever stand on the same tile', () => {
+test('no two people ever stand on the same cell', () => {
   const S = createWorld({ seed: 2049 });
   let worst = 0;
   for (let i = 0; i < 1440 * 15 / 2; i++) {      // fifteen days, every tick
@@ -26,20 +27,24 @@ test('no two people ever stand on the same tile', () => {
     worst = Math.max(worst, overlap);
     if (worst) break;
   }
-  assert.equal(worst, 0, 'nobody ever shares a tile, on any tick');
+  assert.equal(worst, 0, 'nobody ever shares a cell, on any tick');
 });
 
 test('a person in the way is walked around, not walked through', () => {
   const S = createWorld({ seed: 2049 });
-  // Somebody parked squarely on the path to water, with a neighbour behind them.
+  // Somebody parked on the way out of camp, with a neighbour behind them: the
+  // block is four steps from home with the blocker three, on the same path.
+  const out = cellsWithin(S.terrain, S.camp.at, 4);
   const p = living(S)[0];
-  p.x = S.camp.x + 4; p.y = S.camp.y;
+  p.at = [...out.keys()].find(at => out.get(at) === 4);
   const blocker = living(S)[1];
-  blocker.x = S.camp.x + 3; blocker.y = S.camp.y;
+  blocker.at = neighbours(S.terrain, p.at).find(at => out.get(at) === 3) ?? p.at;
+  const other = living(S)[2];
+  if (!out.has(other.at)) other.at = neighbours(S.terrain, S.camp.at).find(at => walkable(S.terrain, at));
   for (let i = 0; i < 240; i++) {
     advance(S, 2);
     const seen = new Set();
-    for (const q of living(S)) { assert.ok(!seen.has(key(q)), 'no tile is ever shared'); seen.add(key(q)); }
+    for (const q of living(S)) { assert.ok(!seen.has(key(q)), 'no cell is ever shared'); seen.add(key(q)); }
   }
 });
 

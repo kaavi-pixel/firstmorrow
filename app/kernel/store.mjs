@@ -9,7 +9,8 @@
 // first attempt's world, its history, or its pre-exploration backup.
 
 import { randomUUID } from 'node:crypto';
-import { createTerrain, addWildFood } from '../public/terrain.mjs';
+import { createTerrain, addWildFood, GEO_VERSION } from '../public/terrain.mjs';
+import { createWorld } from './world.mjs';
 
 // Every world lives under one namespace. It is a knob and not a constant because a
 // planet and a rectangle are not the same world, and re-founding one must not erase
@@ -37,6 +38,15 @@ export const decodeState = raw => JSON.parse(raw, (_k, v) => {
 // be. Keep the people, structures and clock; rebuild the land from its seed.
 export function repairState(S) {
   if (!S) return S;
+  // A world saved when a place was a coordinate is not a world that can be moved.
+  // x and y name nothing on a planet, so every person, the camp and every
+  // structure in that record address cells that do not exist, and there is no
+  // honest way to keep them: a coordinate is not a place. Such a record is
+  // re-founded — the land is the planet again and the five arrive again — and the
+  // return says so, rather than inventing a cell for each old pair of numbers.
+  if (S.terrain && S.terrain.version !== GEO_VERSION) {
+    return { ...createWorld({ seed: S.seed ?? 2049 }), refounded: true };
+  }
   if (!S.terrain || !(S.terrain.tiles instanceof Map) || S.terrain.tiles.size === 0) {
     S.terrain = createTerrain(S.seed ?? 2049);
   }

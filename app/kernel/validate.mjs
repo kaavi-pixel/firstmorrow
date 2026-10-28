@@ -7,7 +7,7 @@
 //
 // Where a rule is a game assumption rather than a physical one, it says so.
 
-import { terrainAt, region, walkable } from '../public/terrain.mjs';
+import { terrainAt, region, walkable, beside, cellDistance, campCells, neighbours } from '../public/terrain.mjs';
 import { validSprite, FORMS } from '../public/forms.mjs';
 
 // The night, in hours. The instinct loop puts each person to bed for exactly
@@ -56,7 +56,11 @@ export const RULES = Object.freeze({
   sayMax: 200,
   tellMax: 280,
   sightTiles: 6,
-  reachTiles: 24,                 // how far someone will walk for water
+  reachTiles: 24,                 // how far someone will walk for water, in steps
+  // How far from camp an author may design. It was a literal 16 in the gate; on a
+  // planet it is still 16 steps, and it lives here so the gate and the brief read
+  // the same number.
+  writTiles: 16,
 });
 
 export const SUBSTANCES = Object.freeze(['water', 'food', 'soil', 'material']);
@@ -94,7 +98,7 @@ function heldBy(S, p) { return (packedAtCamp(S, p) ? S.camp.stock : p.pack); }
 // The camp's stores are communal and reach the whole camp square, because only
 // one person can stand on the camp tile itself.
 function packedAtCamp(S, p) {
-  return Math.abs(p.x - S.camp.x) <= 1 && Math.abs(p.y - S.camp.y) <= 1;
+  return campCells(S.terrain).has(p.at);
 }
 
 function takeFrom(store, want, what) {
@@ -121,7 +125,7 @@ export function applyDeclarations(S, person, decl) {
   if (person.health <= 0) throw new Error('They are dead.');
 
   const applied = [];
-  const here = terrainAt(S.terrain, person.x, person.y);
+  const here = terrainAt(S.terrain, person.at);
 
   // --- say -----------------------------------------------------------------
   if (decl.say !== undefined) {
@@ -151,11 +155,11 @@ export function applyDeclarations(S, person, decl) {
 
   // --- move ----------------------------------------------------------------
   if (decl.move !== undefined) {
-    const { x, y } = decl.move || {};
-    if (!Number.isInteger(x) || !Number.isInteger(y)) throw new Error('move needs integer x and y.');
-    if (Math.abs(x - person.x) + Math.abs(y - person.y) !== 1) throw new Error('move is one cardinal step at a time.');
-    if (!walkable(S.terrain, x, y)) throw new Error('That tile cannot be walked on.');
-    person.x = x; person.y = y;
+    const { at } = decl.move || {};
+    if (!Number.isInteger(at)) throw new Error('move needs a cell id.');
+    if (!beside(S.terrain, person.at, at)) throw new Error('move is one step, to a neighbouring cell.');
+    if (!walkable(S.terrain, at)) throw new Error('That cell cannot be walked on.');
+    person.at = at;
     person.pack.food = Math.max(0, person.pack.food - RULES.kcalPerTileWalk);
     S.minute += RULES.minutesPerTile;
     applied.push('move');
@@ -190,7 +194,7 @@ export function applyDeclarations(S, person, decl) {
 
   // --- take / store: camp stores, or a built structure within reach --------
   function storeNear(S2, p) {
-    const site = S2.structures.find(s => s.built && Math.abs(s.x - p.x) + Math.abs(s.y - p.y) <= 1);
+    const site = S2.structures.find(s => s.built && beside(S2.terrain, s.at, p.at));
     if (!site) return null;
     if (!site.store) site.store = { water: 0, food: 0, material: 0, soil: 0 };
     return site.store;
@@ -238,22 +242,24 @@ export function applyDeclarations(S, person, decl) {
   // --- propose: begin a structure ------------------------------------------
   if (decl.propose !== undefined) {
     const d = decl.propose || {};
-    const x = d.x, y = d.y;
+    const at = d.at;
     const isAuthor = person.kind === 'author';
     // A structure belongs to whoever designed it. An author designs; a person
     // only carries out what an author thought of, and owns nothing.
     const ownerOf = who => (who.kind === 'author' ? who.id : who.authorId ?? null);
-    if (!Number.isInteger(x) || !Number.isInteger(y)) throw new Error('propose needs integer x and y.');
+    if (!Number.isInteger(at)) throw new Error('propose needs a cell id.');
     // A person has to be at the site. An author has no body: it may direct work
     // anywhere it has surveyed, and the material is drawn from camp by the people.
-    if (!isAuthor && Math.abs(x - person.x) + Math.abs(y - person.y) > 1) throw new Error('They must stand on or beside the site.');
-    if (isAuthor && Math.abs(x - S.camp.x) + Math.abs(y - S.camp.y) > 16) throw new Error('That is beyond what they have surveyed.');
+    if (!isAuthor && !beside(S.terrain, person.at, at)) throw new Error('They must stand on or beside the site.');
+    // The writ, in steps from camp rather than in squares. It is a rule, not a
+    // literal: the gate and the brief must not be able to disagree about it.
+    if (isAuthor && cellDistance(S.terrain, S.camp.at, at) > RULES.writTiles) throw new Error('That is beyond what they have surveyed.');
     if (!Number.isInteger(d.mass) || d.mass <= 0 || d.mass > 400) throw new Error('propose.mass must be 1–400 kg.');
-    if (S.structures.some(s => s.x === x && s.y === y)) throw new Error('Something is already standing there.');
+    if (S.structures.some(s => s.at === at)) throw new Error('Something is already standing there.');
     // Labour is the scarce thing: two half-built sites is all five people can carry.
     if (S.structures.filter(s => !s.built).length >= 2) throw new Error('Two things are already half-built. Finish one first.');
-    if (x === S.camp.x && y === S.camp.y) throw new Error('The camp tile has to stay clear.');
-    if (!walkable(S.terrain, x, y)) throw new Error('That tile cannot be built on.');
+    if (at === S.camp.at) throw new Error('The camp cell has to stay clear.');
+    if (!walkable(S.terrain, at)) throw new Error('That cell cannot be built on.');
     const name = String(d.name || 'structure').slice(0, 40);
     // What it is for, in the author's own words. A structure nobody can explain is
     // a structure nobody can judge, and the observer has to be able to read it.
@@ -288,14 +294,14 @@ export function applyDeclarations(S, person, decl) {
       ? S.camp.stock
       : (massOf(person.pack) >= d.mass ? person.pack : (packedAtCamp(S, person) ? S.camp.stock : person.pack));
     takeFrom(source, need, 'building');
-    const id = `s${(S.structures.length + 1).toString().padStart(2, '0')}-${x}.${y}`;
+    const id = `s${(S.structures.length + 1).toString().padStart(2, '0')}-${at}`;
     S.structures.push({
-      id, x, y, name, description, sprite, mass: d.mass, shelter, program,
+      id, at, name, description, sprite, mass: d.mass, shelter, program,
       laborHours: Math.round(d.mass * RULES.buildHoursPerKg * 10) / 10,
       progressHours: 0, built: false, authorId: ownerOf(person), startedAt: S.minute,
     });
     S.log.push({ t: S.minute, kind: 'plan', text: isAuthor
-      ? `${person.name} designed ${name} (${d.mass} kg) at ${x}.${y}: ${description}`
+      ? `${person.name} designed ${name} (${d.mass} kg) at cell ${at}: ${description}`
       : `${person.name} began ${name} (${d.mass} kg).` });
     applied.push('propose');
   }
@@ -312,7 +318,7 @@ export function applyDeclarations(S, person, decl) {
     // `labor` and is simply out of hours must never be answered with "declare
     // labor alongside make": the live world repeated that lie at every dawn.
     if (decl.labor === undefined) throw new Error('A process costs labour; declare labor alongside make.');
-    const site = S.structures.find(s => s.built && Math.abs(s.x - person.x) + Math.abs(s.y - person.y) <= 1);
+    const site = S.structures.find(s => s.built && beside(S.terrain, s.at, person.at));
     if (!site) throw new Error('A process needs a finished structure to run in.');
     if (hours <= 0) {
       fail(`No labour hours left today to run this process${hoursAsked > 0 ? ` (it asks for ${r2(hoursAsked)} h)` : ''}.`);
@@ -323,7 +329,7 @@ export function applyDeclarations(S, person, decl) {
     for (const s of SUBSTANCES) if (Number.isNaN(used[s])) throw new Error(`use.${s} must be a number.`);
 
     // A still has to stand beside the sea before any of the rest applies.
-    const besideSea = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => terrainAt(S.terrain, site.x + dx, site.y + dy)?.regionId === 'sea');
+    const besideSea = neighbours(S.terrain, site.at).some(n => terrainAt(S.terrain, n)?.regionId === 'sea');
     if (out.water > 0 && !besideSea) fail('Only a structure beside the sea can make fresh water.');
     // Nothing comes from nothing: the input mass must cover the output mass.
     // The sea is the one input a structure can tap where it stands, so the water

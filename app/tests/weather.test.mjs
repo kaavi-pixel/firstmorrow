@@ -39,7 +39,7 @@ test('storms are rare, but they happen', () => {
 test('a storm in the world destroys unfinished work', () => {
   const S = createWorld({ seed: 2049 });
   advanceWeather(S.weather, 200);
-  S.structures.push({ id: 'x', name: 'Half a hut', x: S.camp.x + 1, y: S.camp.y, mass: 8, shelter: 0, built: false, progressHours: 3, laborHours: 7.2 });
+  S.structures.push({ id: 'x', name: 'Half a hut', at: S.camp.at, mass: 8, shelter: 0, built: false, progressHours: 3, laborHours: 7.2 });
   let day = -1;
   for (let d = 0; d < 200; d++) if (S.weather.storms[d]) { day = d; break; }
   assert.ok(day >= 0, 'a storm day exists in the first season');

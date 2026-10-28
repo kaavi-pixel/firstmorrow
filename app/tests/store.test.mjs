@@ -6,12 +6,13 @@ import assert from 'node:assert/strict';
 import { createWorld } from '../kernel/world.mjs';
 import { createService, memoryStore, encodeState, decodeState, repairState } from '../kernel/store.mjs';
 
-const START_KEY = 21 * 128 + 13;
-const OASIS_KEY = 19 * 128 + 16;
+// The spring is a place again: four cells three steps from camp, chosen by the
+// seed rather than by an offset from START.
+const springKey = S => S.terrain.spring[0];
 
 test('a saved world comes back with its terrain as a real Map', async () => {
   const S = createWorld({ seed: 2049 });
-  const tile = S.terrain.tiles.get(OASIS_KEY);
+  const tile = S.terrain.tiles.get(springKey(S));
   assert.ok(tile && tile.potable > 0, 'the spring is there to begin with');
   tile.potable = 3.5;                       // a mark only a faithful round-trip keeps
 
@@ -24,7 +25,7 @@ test('a saved world comes back with its terrain as a real Map', async () => {
   const back = await store.load();
   assert.ok(back.terrain.tiles instanceof Map, 'the tiles are a Map again');
   assert.equal(back.terrain.tiles.size, S.terrain.tiles.size, 'every tile survived');
-  assert.equal(back.terrain.tiles.get(OASIS_KEY).potable, 3.5, 'the spring keeps its level');
+  assert.equal(back.terrain.tiles.get(springKey(S)).potable, 3.5, 'the spring keeps its level');
   assert.equal(back.people.length, 5, 'the people are still there');
 });
 
@@ -74,10 +75,10 @@ test('a world saved before wild food existed is given it once, and only once', (
 
   assert.ok(S.terrain.forage.length > 100, 'the land can be foraged again');
   assert.ok(tiles.filter(t => t.food > 0).length > 100, 'and the tiles carry food');
-  assert.ok(S.terrain.tiles.get(OASIS_KEY).food > 0, 'the spring country especially');
+  assert.ok(S.terrain.tiles.get(springKey(S)).food > 0, 'the spring country especially');
 
   // Now eat a tile down and repair again: used-up ground must not refill.
-  S.terrain.tiles.get(OASIS_KEY).food = 0;
+  S.terrain.tiles.get(springKey(S)).food = 0;
   repairState(S);
-  assert.equal(S.terrain.tiles.get(OASIS_KEY).food, 0, 'used-up ground is not refilled');
+  assert.equal(S.terrain.tiles.get(springKey(S)).food, 0, 'used-up ground is not refilled');
 });

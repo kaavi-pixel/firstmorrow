@@ -21,7 +21,7 @@ test('an author can read what the others have written and said', () => {
   const S = createWorld();
   const [a0, a1] = S.authors;
   applyDeclarations(S, a0, { tell: 'I am digging for water at the spring. Engineer, can you brace the shaft?' });
-  S.structures.push({ id: 's1', name: 'Brace', x: S.camp.x + 1, y: S.camp.y, mass: 20, shelter: 0, built: true, progressHours: 18, laborHours: 18, authorId: a1.id, program: 'return {labor:1};' });
+  S.structures.push({ id: 's1', name: 'Brace', at: S.camp.at, mass: 20, shelter: 0, built: true, progressHours: 18, laborHours: 18, authorId: a1.id, program: 'return {labor:1};' });
 
   const view = authorView(S, a1.id);
   assert.equal(view.allies.length, S.authors.length - 1, 'the other authors are named as allies');

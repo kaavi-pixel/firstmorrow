@@ -8,7 +8,7 @@ import { Redis } from '@upstash/redis';
 import { waitUntil } from '@vercel/functions';
 import { createService, redisStore, memoryStore } from '../kernel/store.mjs';
 import { createWorld } from '../kernel/world.mjs';
-import { livePayload } from '../kernel/payload.mjs';
+import { livePayload, cellCard } from '../kernel/payload.mjs';
 import { createCaller } from '../kernel/provider.mjs';
 import { structureEnv } from '../kernel/capability.mjs';
 import { runProgram } from '../kernel/sandbox.mjs';
@@ -17,6 +17,9 @@ import {
 } from '../kernel/auth.mjs';
 
 const SEED = Number(process.env.FM_SEED || 2049);
+// The level, read where environments live. `public/terrain.mjs` must never read one:
+// every client import of it would die on `process is not defined`.
+const SUBDIVISIONS = Math.max(1, Number(process.env.FM_SUBDIVISIONS || 14));
 
 // Sign-in is configured by environment, and off until it is. No client or secret
 // in the environment and the routes answer honestly rather than pretending.
@@ -41,7 +44,7 @@ const caller = process.env.PPLX_API_KEY
 
 const service = createService({
   store: redis ? redisStore(redis) : memoryStore(),
-  build: () => createWorld({ seed: SEED }),
+  build: () => createWorld({ seed: SEED, subdivisions: SUBDIVISIONS }),
   caller,
   run: (code, s, S) => runProgram(code, structureEnv(S, s), SEED),
 });
@@ -126,6 +129,27 @@ export default async function handler(req, res) {
     res.setHeader('cache-control', 'no-store');
     res.end(JSON.stringify({ ok: true, reset: true, ...livePayload(state) }));
     return;
+  }
+
+  // ------------------------------------------------------------ one clicked hexagon
+  // The poll carries regions, not reserves: a hexagon's ground is read on the click
+  // that asks for it. `ensure` rather than `tick`, so walking the map does not spend
+  // the world's time — a visitor reading a cell is not a visitor advancing it.
+  if (url.pathname === '/api/cell') {
+    try {
+      const state = await service.ensure();
+      const card = cellCard(state, url.searchParams.get('id'));
+      res.statusCode = card ? 200 : 404;
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('cache-control', 'no-store');
+      res.end(JSON.stringify(card ? { cell: card } : { error: 'no such cell', id: url.searchParams.get('id') }));
+      return;
+    } catch (e) {
+      res.statusCode = 500;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: e.message }));
+      return;
+    }
   }
 
   if (url.pathname === '/api/live' || url.pathname === '/api/tick' || url.pathname === '/api/health') {

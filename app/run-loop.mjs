@@ -34,6 +34,9 @@ const flag = (name, fallback) => {
 const EVERY_MS = Number(flag('every', 5)) * 1000;
 const ONCE = process.argv.includes('--once');
 const SEED = Number(process.env.FM_SEED || 2049);
+// The level, read where environments live. `public/terrain.mjs` must never read one:
+// every client import of it would die on `process is not defined`.
+const SUBDIVISIONS = Math.max(1, Number(process.env.FM_SUBDIVISIONS || 14));
 
 const keys = {
   perplexity: process.env.PPLX_API_KEY,
@@ -44,7 +47,7 @@ const caller = keys.perplexity || keys.openai || keys.xai ? createCaller({ keys 
 
 const service = createService({
   store: memoryStore(),
-  build: () => createWorld({ seed: SEED }),
+  build: () => createWorld({ seed: SEED, subdivisions: SUBDIVISIONS }),
   caller,
   run: (code, s, S) => runProgram(code, structureEnv(S, s), SEED),
   authorIntervalMs: 0,          // watchable: one turn per beat, up to the daily budget

@@ -1,5 +1,7 @@
 // The observer's view. Thin on purpose: the world does the work.
-import { paintSprite, paintPerson, paintAgent, createWorldRenderer } from './art.js';
+import { paintSprite, paintPerson, paintAgent } from './paint.mjs';
+import { createSphereRenderer } from './sphere.js';
+import { geographyFromPayload, cardFor, cellCardLocal } from './cells.mjs';
 
 const $ = id => document.getElementById(id);
 const view = { seed: 0, minute: 0, geography: null, buildings: [], inhabitants: [] };
@@ -35,13 +37,16 @@ function renderAccount() {
   $('speed-note').hidden = !(viewer && viewer.canSpeed);
 }
 
-function buildGeography(g) {
-  const tiles = new Map();
-  const { bounds, grid, gridW, regionIds } = g;
-  for (let y = bounds.minY; y <= bounds.maxY; y++)
-    for (let x = bounds.minX; x <= bounds.maxX; x++)
-      tiles.set(y * 128 + x, { x, y, regionId: regionIds[grid[y * gridW + x]] });
-  return { version: g.version, seed: g.seed, tileM: g.tileM, bounds, mainland: g.mainland, regions: g.regions, features: g.features, oasis: g.oasis, tiles };
+// The world is a planet and the browser is an observer: the geometry comes from the
+// module, everything that state decides comes from the payload, and nothing spatial is
+// guessed. `tiles` is keyed by cell id — there is no x*y+1 to add up any more.
+//
+// This and the kernel's payload are one change, not two. Handed the rectangle's
+// geography — `bounds`, `grid`, `gridW`, no `subdivisions` and no `cellRegions` — this
+// returns null, and a client that shipped without the port would draw an empty page and
+// say nothing. So it says something instead.
+export function buildGeography(g) {
+  return geographyFromPayload(g) || null;
 }
 
 function apply(p) {
@@ -56,6 +61,11 @@ function apply(p) {
     $('scrub-label').textContent = `Live ${p.clock}`;
   }
   if (!view.geography || view.geography.seed !== p.geography.seed) view.geography = buildGeography(p.geography);
+  if (!view.geography) {
+    // The server is still describing a rectangle. Say so rather than drawing nothing.
+    $('status-label').textContent = 'This build expects the cell world — the payload is still a grid';
+    return;
+  }
   view.buildings = p.buildings;
   view.inhabitants = p.inhabitants;
   $('day').textContent = `Day ${p.day + 1}`;
@@ -225,17 +235,17 @@ async function poll() {
     const res = await fetch('/api/live' + q, { cache: 'no-store' });
     apply(await res.json());
     if (!renderer) {
-      renderer = createWorldRenderer($('world'), {
+      renderer = createSphereRenderer($('world'), {
         getWorld: () => view, getSpeed: () => (viewer && Number(viewer.speed)) || 1,
-        activityFor: i => payload.activities[i] || { tile: view.inhabitants[i] || { x: 13, y: 21 }, kind: 'idle' },
+        activityFor: i => payload.activities[i] || null,
         onSelect: hit => selectThing(hit),
         getAgents: () => payload.authors,
         agentActivity: a => payload.authorActivity[payload.authors.indexOf(a)] || null,
-        getSpeech: obj => payload.speech[obj.id] || null,
       });
+      renderer.start();
       // QA hooks, in the spirit of v1: let a test drive the renderer without
       // depending on the animation frame.
-      window.fm = { renderer, view, payload: () => payload, draw: dt => renderer.draw(dt ?? 0.016), rotate: r => renderer.rotateBy(r), select: selectThing };
+      window.fm = { renderer, view, payload: () => payload, draw: dt => renderer.draw(dt ?? 0.016), rotate: r => renderer.rotateBy(r), select: selectThing, cell: at => cellCard(at) };
     }
   } catch (e) { $('status-label').textContent = 'Offline'; }
   setTimeout(poll, 1000);
@@ -252,8 +262,10 @@ const bar = v => `<span class="bar"><i style="width:${Math.round(Math.max(0, Mat
 const recentWords = id => (payload.conversations || []).filter(m => m.speakerId === id).slice(0, 2)
   .map(m => `<p class="quote">“${esc(m.text)}”<span class="muted small"> to ${esc(m.target)}</span></p>`).join('');
 
-// Every clickable thing answers with a card. A person, an author, and the thing
-// an author designed all have one; clicking empty ground closes it.
+// Every clickable thing answers with a card. A person, an author, and the thing an
+// author designed all have one — and so does the ground itself, which is the change a
+// planet forces: on the rectangle clicking bare ground *closed* the card, and here the
+// cell you clicked is the thing there is to know about. Empty sky at the limb closes it.
 function selectThing(hit) {
   const card = $('card');
   if (renderer && renderer.select) renderer.select(hit);
@@ -261,7 +273,47 @@ function selectThing(hit) {
   if (hit.type === 'person') return showPerson(card, hit.id);
   if (hit.type === 'agent') return showAgent(card, hit.id);
   if (hit.type === 'building') return showBuilding(card, hit.id);
+  if (hit.type === 'ground' && Number.isInteger(hit.at)) return showCell(card, hit.at);
   card.hidden = true;
+}
+
+// The cell card opens on what the poll already carries, then fills in the ground's own
+// reserves from /api/cell — one cell, on the click that asks for it. Reserves on every
+// poll would be 42 kB a second for numbers read one cell at a time.
+async function showCell(card, at) {
+  const geo = view.geography;
+  const local = geo ? cellCardLocal(geo, at, { people: payload.inhabitants, structures: payload.buildings }) : null;
+  if (!local) { card.hidden = true; return; }
+  const paint = (c) => {
+    const r = c.reserves;
+    const region = geo.regions.find(x => x.id === c.regionId);
+    card.innerHTML = `
+      <div class="card-head">
+        <canvas></canvas>
+        <div><h3>Cell ${c.id} · ${esc(region ? region.name : c.regionId)}</h3>
+        <p>${c.camp ? 'the camp itself' : c.inCamp ? 'beside the camp' : `${c.neighbours.length}-sided ground`}${c.pentagon ? ' (one of the twelve five-sided cells)' : ''}</p></div>
+      </div>
+      ${r ? `<dl class="facts">
+        <div><dt>Water</dt><dd>${fmt(r.water)} L${r.potable ? ` · ${fmt(r.potable)} L drinkable` : ' · not drinkable'}</dd></div>
+        <div><dt>Soil</dt><dd>${fmt(r.soil)} kg</dd></div>
+        <div><dt>Material</dt><dd>${fmt(r.material)} kg</dd></div>
+        <div><dt>Wild food</dt><dd>${fmt(r.food)} kcal</dd></div>
+      </dl>` : '<p class="muted small">Reading the ground…</p>'}
+      <div class="tags">
+        <span class="tag">${c.neighbours.length} neighbours</span>
+        ${Number.isInteger(c.stepsFromCamp) ? `<span class="tag">${c.stepsFromCamp} cells away, straight across the surface</span>` : ''}
+        ${c.walk === false ? '<span class="tag">the sea — nobody stands here</span>' : ''}
+        ${c.reachableOnFoot === false ? '<span class="tag">across water — no way to walk</span>' : ''}
+      </div>
+      ${c.standing && c.standing.length ? `<div class="tags">${c.standing.map(s => `<span class="tag">${esc(s.name)}</span>`).join('')}</div>` : ''}
+      ${c.people && c.people.length ? `<div class="tags">${c.people.map(q => `<span class="tag">${esc(q.name)} · ${esc(DOING[q.doing] || q.doing)}</span>`).join('')}</div>` : ''}`;
+    card.hidden = false;
+  };
+  paint(local);
+  try {
+    const full = await cardFor(at);
+    if (full && payload && view.geography === geo) paint(full);
+  } catch {}
 }
 
 function showPerson(card, id) {
@@ -323,7 +375,7 @@ function showBuilding(card, id) {
     <div class="tags">
       <span class="tag">${b.mass} kg of material</span>
       ${b.shelter ? `<span class="tag">shelters ${b.shelter}</span>` : ''}
-      <span class="tag">tile ${b.x},${b.y}</span>
+      <span class="tag">cell ${b.at}</span>
     </div>
     ${b.program ? `<details><summary>Its program</summary><pre>${esc(b.program)}</pre></details>` : ''}`;
   paintSprite(card.querySelector('canvas'), b);

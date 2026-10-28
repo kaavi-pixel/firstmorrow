@@ -3,8 +3,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, advance, living } from '../kernel/world.mjs';
 import { advanceWeather } from '../kernel/weather.mjs';
-import { terrainAt, OASIS } from '../public/terrain.mjs';
+import { terrainAt, walkable, neighbours, cellDistance, cellsWithin } from '../public/terrain.mjs';
 import { RULES } from '../kernel/validate.mjs';
+
+/** The spring, as the place it is: the cell three steps out that carries water. */
+const springCell = S => S.terrain.spring[0];
+/** A walkable cell beside the camp, for anything the test wants standing there. */
+const campSpot = S => neighbours(S.terrain, S.camp.at).find(at => walkable(S.terrain, at));
 
 test('they walk to water they can see and bring it home', () => {
   const S = createWorld({ seed: 2049 });
@@ -17,7 +22,6 @@ test('they walk to water they can see and bring it home', () => {
 
 test('the spring is finite, and they can empty it', () => {
   const S = createWorld({ seed: 2049 });
-  const before = ['', '', '', ''].length;
   let potable = 0;
   for (const t of S.terrain.tiles.values()) potable += t.potable;
   assert.ok(potable > 0);
@@ -25,7 +29,6 @@ test('the spring is finite, and they can empty it', () => {
   let after = 0;
   for (const t of S.terrain.tiles.values()) after += t.potable;
   assert.ok(after < potable, `water was drawn down (${potable} -> ${after})`);
-  assert.ok(before === 4);
 });
 
 test('a storm sends them under a roof, and a bare camp gives them nowhere to go', () => {
@@ -44,8 +47,8 @@ test('with a roof built, the same storm finds them indoors', () => {
   advanceWeather(S.weather, 200);
   let stormDay = -1;
   for (let d = 0; d < 200; d++) if (S.weather.storms[d]) { stormDay = d; break; }
-  // A shelter standing at camp, as an author would have had the people build.
-  S.structures.push({ id: 's1', name: 'Windbreak', x: S.camp.x, y: S.camp.y - 1, mass: 40, shelter: 5, built: true, progressHours: 36, laborHours: 36, sprite: null });
+  // A shelter standing beside the camp, as an author would have had the people build.
+  S.structures.push({ id: 's1', name: 'Windbreak', at: campSpot(S), mass: 40, shelter: 5, built: true, progressHours: 36, laborHours: 36, sprite: null });
   S.minute = stormDay * 1440 + S.weather.storms[stormDay].hour * 60 - 120;
   advance(S, 180 + 1);                              // into the middle of the storm
   assert.ok(S.people.some(p => p.activity === 'shelter'), 'they took cover');
@@ -64,38 +67,35 @@ test('a weakened person cannot work a full day', () => {
 
 test('instincts obey the same gate: they cannot drink the sea', () => {
   const S = createWorld({ seed: 2049 });
-  // A shore tile: sea, with land beside it, so a step off it is possible.
-  let sea = null;
+  // A shore cell: sea, with land beside it, so a step off it is possible.
+  let shore = null;
   for (const t of S.terrain.tiles.values()) {
     if (t.regionId !== 'sea') continue;
-    const besideLand = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
-      const n = terrainAt(S.terrain, t.x + dx, t.y + dy);
-      return n && n.regionId !== 'sea';
-    });
-    if (besideLand) { sea = t; break; }
+    if (neighbours(S.terrain, t.id).some(n => walkable(S.terrain, n))) { shore = t; break; }
   }
-  assert.ok(sea, 'there is a shore');
-  assert.equal(terrainAt(S.terrain, sea.x, sea.y).potable, 0, 'the sea is not drinkable');
+  assert.ok(shore, 'there is a shore');
+  assert.equal(terrainAt(S.terrain, shore.id).potable, 0, 'the sea is not drinkable');
   const p = S.people[0];
-  p.x = sea.x; p.y = sea.y; p.pack.water = 0;
+  p.at = shore.id; p.pack.water = 0;
   S.camp.stock.water = 0;
   advance(S, 12);
-  assert.ok(p.x !== sea.x || p.y !== sea.y, 'they left the shore rather than drink it');
+  assert.ok(p.at !== shore.id, 'they left the shore rather than drink it');
   for (const t of S.terrain.tiles.values())
-    if (t.regionId === 'sea') assert.equal(t.potable, 0, 'no sea tile ever becomes drinkable');
+    if (t.regionId === 'sea') assert.equal(t.potable, 0, 'no sea cell ever becomes drinkable');
 });
 
-test('the oasis is where the terrain says it is', () => {
+test('the spring is where the terrain says it is', () => {
   const S = createWorld({ seed: 2049 });
-  const t = terrainAt(S.terrain, OASIS.x, OASIS.y);
-  assert.ok(t.potable > 0, 'the spring is real and drinkable');
+  assert.equal(S.terrain.spring.length, 4, 'four cells, because one body to a cell');
+  assert.equal(cellDistance(S.terrain, S.camp.at, springCell(S)), 3, 'three steps out, inside sight');
+  assert.ok(terrainAt(S.terrain, springCell(S)).potable > 0, 'the spring is real and drinkable');
 });
 
 test('with an empty larder they forage before they build', () => {
   const S = createWorld({ seed: 2049 });
   // Somebody has designed a water butt and it is not standing yet.
   S.structures.push({
-    id: 'site1', name: 'Water butt', x: S.camp.x + 1, y: S.camp.y, authorId: S.authors[0].id,
+    id: 'site1', name: 'Water butt', at: campSpot(S), authorId: S.authors[0].id,
     built: false, laborHours: 40, progressHours: 0, shelter: 0, store: { water: 0, food: 0 }, program: null,
   });
   S.camp.stock.food = 0;
@@ -114,8 +114,8 @@ test('a starving person walks further for food than a comfortable one', () => {
   const S = createWorld({ seed: 2049 });
   const p = S.people[0];
   const far = [...S.terrain.tiles.values()].find(t => t.food > 0 &&
-    Math.abs(t.x - p.x) + Math.abs(t.y - p.y) > RULES.reachTiles &&
-    Math.abs(t.x - p.x) + Math.abs(t.y - p.y) < RULES.reachTiles * 4);
+    cellDistance(S.terrain, p.at, t.id) > RULES.reachTiles &&
+    cellDistance(S.terrain, p.at, t.id) < RULES.reachTiles * 4);
   assert.ok(far, 'the map has food beyond their usual radius');
   p.pack.food = 0;               // desperate
   S.camp.stock.food = 0;
@@ -123,17 +123,17 @@ test('a starving person walks further for food than a comfortable one', () => {
   assert.ok(S.camp.stock.food > 0 || p.pack.food > 0, 'someone reached the far food');
 });
 
-test('two people never stand on the same tile', () => {
+test('two people never stand on the same cell', () => {
   const S = createWorld({ seed: 2049 });
   for (let i = 0; i < 48; i++) {                    // two days, sampled hourly
     advance(S, 60);
     const seen = new Map();
     for (const p of living(S)) {
-      const k = `${p.x},${p.y}`;
+      const k = p.at;
       seen.set(k, (seen.get(k) || 0) + 1);
     }
     assert.ok([...seen.values()].every(n => n === 1),
-      `two people shared a tile at minute ${S.minute}: ${JSON.stringify([...seen].filter(([, n]) => n > 1))}`);
+      `two people shared a cell at minute ${S.minute}: ${JSON.stringify([...seen].filter(([, n]) => n > 1))}`);
   }
 });
 
