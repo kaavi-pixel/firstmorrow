@@ -147,7 +147,28 @@ export function createPlanet({ seed = 2049, subdivisions = 14 } = {}) {
     pentagons: cells.filter(c => c.next.length === 5).map(c => c.id),
     triangles: faces,
   };
-  return shapePlanet(planet);
+  // Geometry and nothing else. A client rebuilds the planet from here: ids, corners,
+  // centres, adjacency. It deliberately has no `regionId` and no reserves, because
+  // land is state and state comes from the payload. Shaping it here as well would
+  // hand a client a planet that looks right and is not.
+  return planet;
+}
+
+/**
+ * The whole world, composed in one call: geometry, then land, then the camp, then the
+ * spring. Anything that needs a world rather than a shape wants this, because the two
+ * steps after `shapePlanet` move cells: the spring rewrites the region and the
+ * reserves of four of them. A caller that runs `createPlanet` and `shapePlanet` and
+ * stops has a planet with no camp and a spring with no water in it, and nothing about
+ * it looks wrong until someone walks to the water.
+ */
+export function worldPlanet({ seed = 2049, subdivisions = 14 } = {}) {
+  const planet = shapePlanet(createPlanet({ seed, subdivisions }));
+  const camp = campsite(planet);
+  const spring = springFor(planet, camp);
+  planet.camp = camp;
+  planet.spring = spring;
+  return planet;
 }
 
 // --- land --------------------------------------------------------------------

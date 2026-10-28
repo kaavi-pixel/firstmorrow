@@ -1,4 +1,5 @@
-// The planet's geometry, and the two numbers that must not stay as grid literals.
+// The planet's geometry, the composition of a world, and the two numbers that must not
+// stay as grid literals.
 //
 // These checks are deliberately projection-free: the tiling is proved with spherical
 // excess (the angles of a cell's own polygon must add up to its area), so a bug in a
@@ -6,13 +7,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createPlanet, cellDistance, cellsWithin, campsite, springFor, budgetFor, scaleOf,
-  landmasses, landmassOf, SPRING, CELL_M,
+  createPlanet, worldPlanet, shapePlanet, cellDistance, cellsWithin, campsite, springFor,
+  budgetFor, scaleOf, landmasses, landmassOf, SPRING, CELL_M,
 } from '../public/hexasphere.mjs';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const norm = v => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 /**
  * The area of a cell's own spherical polygon, by Girard's theorem: the angles minus
@@ -38,7 +40,6 @@ function sphericalArea(corners) {
   }
   return sum - (k - 2) * Math.PI;
 }
-const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 test('a planet has ten n squared plus two cells, and it is twelve pentagons', () => {
   for (const n of [2, 4, 8, 14]) {
@@ -48,6 +49,53 @@ test('a planet has ten n squared plus two cells, and it is twelve pentagons', ()
     assert.ok(P.cells.every(c => c.next.length === 5 || c.next.length === 6), 'five or six neighbours, nothing else');
     assert.ok(P.cells.every(c => Math.abs(Math.hypot(...c.p) - 1) < 1e-9), 'every cell sits on the sphere');
   }
+});
+
+test('the client rebuilds geometry: no cell knows what it is made of until the payload says', () => {
+  // The failure this pins: `createPlanet` shaping the land as well as building it, so a
+  // client that rebuilds the planet gets land that looks right and has drifted. Land is
+  // state, and state comes from the payload, so the geometry must not carry any.
+  const geo = createPlanet({ seed: 2049, subdivisions: 14 });
+  assert.equal(geo.version, 2);
+  assert.ok(geo.cells.every(c => c.regionId === undefined && c.water === undefined && c.potable === undefined), 'geometry carries no land');
+  assert.equal(geo.springs, undefined, 'and no index of places to drink');
+  assert.ok(geo.cells.every(c => Array.isArray(c.corners) && c.corners.length >= 5), 'but every cell has corners');
+  assert.ok(geo.cells.every(c => Array.isArray(c.next) && c.next.length >= 5), 'and neighbours');
+  assert.ok(geo.cells.every(c => Array.isArray(c.centre) && Math.abs(Math.hypot(...c.centre) - 1) < 1e-9), 'and a centre to draw it around');
+  const P = worldPlanet({ seed: 2049, subdivisions: 14 });
+  assert.ok(P.cells.every(c => typeof c.regionId === 'string'), 'the world does know what it is made of');
+  assert.equal(P.camp, campsite(P), 'and it carries its camp');
+  assert.deepEqual(P.spring.cells, springFor(shapePlanet(createPlanet({ seed: 2049, subdivisions: 14 })), P.camp).cells, 'and the same spring');
+});
+
+test('one entry point composes the world, because the spring moves cells the shape alone gets wrong', () => {
+  // Measured, not assumed: shaping the planet stops short of the camp and the spring,
+  // and the spring rewrites four cells. A world built from the shape step alone draws a
+  // spring with no water in it, and the one cell that already matched hides half of it.
+  const shapeOnly = shapePlanet(createPlanet({ seed: 2049, subdivisions: 14 }));
+  const camp = campsite(shapeOnly);
+  // Snapshot before anything else touches this planet: `springFor` rewrites cells in
+  // place, so comparing against a planet that has already had the spring run on it
+  // would compare the fix with itself and pass whatever happened.
+  const before = shapeOnly.cells.map(c => ({ regionId: c.regionId, potable: c.potable }));
+  const whole = worldPlanet({ seed: 2049, subdivisions: 14 });
+
+  assert.equal(whole.camp, camp, 'the same camp either way');
+  assert.equal(whole.spring.at, springFor(shapePlanet(createPlanet({ seed: 2049, subdivisions: 14 })), camp).at, 'and the same spring either way');
+  let regionMoved = 0, waterMoved = 0;
+  for (const id of whole.spring.cells) {
+    if (before[id].regionId !== whole.cells[id].regionId) regionMoved++;
+    if (before[id].potable !== whole.cells[id].potable) waterMoved++;
+  }
+  assert.equal(regionMoved, 3, 'three of the spring\'s four cells are a different region without the spring');
+  assert.equal(waterMoved, 4, 'and all four lose their 180 L without it');
+  assert.equal(whole.cells[whole.spring.at].potable, SPRING.potable);
+  assert.ok(whole.springs.includes(whole.spring.at), 'the composed world has it in the index');
+  // Composing twice gives the same world, so the order of the steps cannot drift.
+  const again = worldPlanet({ seed: 2049, subdivisions: 14 });
+  assert.deepEqual(again.spring.cells, whole.spring.cells);
+  assert.deepEqual(again.cells.map(c => [c.regionId, c.potable]), whole.cells.map(c => [c.regionId, c.potable]));
+  assert.equal(again.camp, whole.camp);
 });
 
 test('every cell can be walked to from every other, over neighbours that agree', () => {
@@ -98,7 +146,7 @@ test('the twelve pentagons sit where the icosahedron corners were, and never tou
 });
 
 test('the land is the land: the same regions, finite, and every kind present', () => {
-  const P = createPlanet({ seed: 2049, subdivisions: 14 });
+  const P = worldPlanet({ seed: 2049, subdivisions: 14 });
   const counts = {};
   for (const c of P.cells) counts[c.regionId] = (counts[c.regionId] || 0) + 1;
   for (const id of ['sea', 'coast', 'scrub', 'interior', 'rock']) assert.ok(counts[id] > 0, `${id} exists on the planet`);
@@ -116,9 +164,9 @@ test('the land is the land: the same regions, finite, and every kind present', (
 
 test('the camp is on the coast with water it can walk to, and it is the seed that picks it', () => {
   for (const seed of [2049, 7, 12345]) {
-    const P = createPlanet({ seed, subdivisions: 14 });
-    const camp = campsite(P);
-    assert.equal(camp, campsite(createPlanet({ seed, subdivisions: 14 })), 'the same seed picks the same camp');
+    const P = worldPlanet({ seed, subdivisions: 14 });
+    const camp = P.camp;
+    assert.equal(camp, worldPlanet({ seed, subdivisions: 14 }).camp, 'the same seed picks the same camp');
     assert.equal(P.cells[camp].regionId, 'coast');
     assert.ok(P.cells[camp].next.filter(j => P.cells[j].regionId !== 'sea').length >= 4, 'there is ground around it');
     const near = [...cellsWithin(P, camp, 3)].filter(([id, d]) => d > 0 && P.cells[id].potable > 0);
@@ -126,15 +174,14 @@ test('the camp is on the coast with water it can walk to, and it is the seed tha
   }
 });
 
-test('the spring is four cells, visible from camp, and the only water in reach of it', () => {
-  const P = createPlanet({ seed: 2049, subdivisions: 14 });
-  const camp = campsite(P);
-  const spring = springFor(P, camp);
+test('the spring is four cells, visible from camp, and made of ground someone can stand on', () => {
+  const P = worldPlanet({ seed: 2049, subdivisions: 14 });
+  const spring = P.spring;
   assert.ok(spring, 'there is a spring');
-  assert.equal(cellDistance(P, camp, spring.at), SPRING.steps, 'three steps out, so it is seen from camp');
-  assert.ok(cellDistance(P, camp, spring.at) <= 6, 'inside sight');
+  assert.equal(cellDistance(P, P.camp, spring.at), SPRING.steps, 'three steps out, so it is seen from camp');
+  assert.ok(cellDistance(P, P.camp, spring.at) <= 6, 'inside sight');
   assert.equal(spring.cells.length, SPRING.spread + 1, 'four cells, because one body stands on one tile');
-  assert.ok(!spring.cells.includes(camp), 'the camp is not the spring');
+  assert.ok(!spring.cells.includes(P.camp), 'the camp is not the spring');
   for (const id of spring.cells) {
     const t = P.cells[id];
     assert.notEqual(t.regionId, 'sea', `${id} is land`);
@@ -145,8 +192,6 @@ test('the spring is four cells, visible from camp, and the only water in reach o
   const total = spring.cells.reduce((a, id) => a + P.cells[id].potable, 0);
   assert.equal(total, (SPRING.spread + 1) * SPRING.potable, 'finite, and countable');
   assert.ok(P.springs.includes(spring.at), 'and it is in the index of places to drink');
-  // It is drinkable, and finite: the index and the reserves are the same fact.
-  assert.equal(P.cells[spring.at].potable, SPRING.potable);
 });
 
 test('the reach and the author\'s writ are distances, and a bigger world is a bigger world', () => {
@@ -155,15 +200,15 @@ test('the reach and the author\'s writ are distances, and a bigger world is a bi
   // person walks 8 m a step, so 24 steps is 192 m of walking for water at every level.
   const seen = [];
   for (const n of [8, 14, 32]) {
-    const P = createPlanet({ seed: 2049, subdivisions: n });
-    const camp = campsite(P);
-    const b = budgetFor(P, camp);
+    const P = worldPlanet({ seed: 2049, subdivisions: n });
+    const b = budgetFor(P, P.camp);
     assert.ok(b.span > 4, 'the world is bigger than the camp');
     assert.ok(b.writ < b.reach, `writ ${b.writ} must sit inside reach ${b.reach}`);
     assert.ok(b.reach <= b.span && b.writ <= b.span, 'nobody reaches past the world');
     seen.push({ n, ...b });
   }
   const at14 = seen.find(s => s.n === 14);
+  assert.equal(at14.span, 73, 'the camp\'s walk at the level the world is built at');
   assert.equal(at14.reach, 24, 'the reach is the same 192 m it always was');
   assert.equal(at14.writ, 16, 'and so is the writ');
   // The rectangle's shares were 77% and 52% of a 31 step walk. The planet's land
@@ -176,12 +221,11 @@ test('the reach and the author\'s writ are distances, and a bigger world is a bi
   assert.ok(big.span > at14.span * 2, 'a bigger level really is a bigger world');
   assert.ok(big.reachShare < at14.reachShare, `and the camp holds a smaller share of it (${big.reachShare.toFixed(2)} < ${at14.reachShare.toFixed(2)})`);
   // A camp can still live at the level the world is built at.
-  const P = createPlanet({ seed: 2049, subdivisions: 14 });
-  const camp = campsite(P);
-  const b = budgetFor(P, camp);
-  const insideReach = [...cellsWithin(P, camp, b.reach)].filter(([id, d]) => d > 0 && P.cells[id].potable > 0);
+  const P = worldPlanet({ seed: 2049, subdivisions: 14 });
+  const b = budgetFor(P, P.camp);
+  const insideReach = [...cellsWithin(P, P.camp, b.reach)].filter(([id, d]) => d > 0 && P.cells[id].potable > 0);
   assert.ok(insideReach.length > 0, 'water within reach');
-  const insideWrit = [...cellsWithin(P, camp, b.writ)].filter(([id]) => P.cells[id].regionId !== 'sea');
+  const insideWrit = [...cellsWithin(P, P.camp, b.writ)].filter(([id]) => P.cells[id].regionId !== 'sea');
   assert.ok(insideWrit.length > 8, 'an author has somewhere to build');
 });
 
@@ -207,19 +251,16 @@ test('the camp and the spring stand on the one landmass, so nobody lives on an i
   // A rectangle's edge was a wall you could see coming. On a planet the land ends in
   // water, and a cell or two of land in the middle of the sea is a place a newborn
   // could be put with nowhere to walk. The rule is to stay on the camp's landmass.
-  const P = createPlanet({ seed: 2049, subdivisions: 14 });
-  const camp = campsite(P);
-  const spring = springFor(P, camp);
+  const P = worldPlanet({ seed: 2049, subdivisions: 14 });
   const masses = landmasses(P);
-  const home = landmassOf(P, camp);
+  const home = landmassOf(P, P.camp);
   assert.equal(masses[0].size, home.size, 'the camp is on the largest landmass');
   assert.ok(home.size > P.land * 0.9, 'and the land is one continent, as it is on every level measured');
-  assert.equal(landmassOf(P, spring.at).size, home.size, 'the spring is on it too');
-  assert.ok(cellsWithin(P, camp, 24).size > 100, 'the camp has somewhere to live and walk');
+  assert.equal(landmassOf(P, P.spring.at).size, home.size, 'the spring is on it too');
+  assert.ok(cellsWithin(P, P.camp, 24).size > 100, 'the camp has somewhere to live and walk');
   assert.equal(landmassOf(P, P.cells.find(c => c.regionId === 'sea').id), null, 'the sea is not a landmass');
   // The islets exist, and nothing places anyone on them by accident.
-  const islets = masses.slice(1);
-  assert.ok(islets.every(m => m.size < 10), `islets are islets: ${islets.map(m => m.size).join(', ')}`);
+  assert.deepEqual(masses.slice(1).map(m => m.size), [2, 1, 1], 'islets of a cell or two, as measured');
 });
 
 test('the planet is small, and how small is arithmetic, not an opinion', () => {
