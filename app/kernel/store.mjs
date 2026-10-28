@@ -11,10 +11,16 @@
 import { randomUUID } from 'node:crypto';
 import { createTerrain, addWildFood } from '../public/terrain.mjs';
 
+// Every world lives under one namespace. It is a knob and not a constant because a
+// planet and a rectangle are not the same world, and re-founding one must not erase
+// the other: with this set, a new world is built beside the old one and the old one
+// keeps ticking in its own keys. Defaults to the namespace production is already
+// using, so nothing moves unless someone sets it.
+export const WORLD_NS = process.env.FM_WORLD_NS || 'fm2';
 export const KEYS = Object.freeze({
-  world: 'fm2:world',
-  lock: 'fm2:lock',
-  sched: 'fm2:sched',
+  world: `${WORLD_NS}:world`,
+  lock: `${WORLD_NS}:lock`,
+  sched: `${WORLD_NS}:sched`,
 });
 
 // JSON has no Map. The terrain is a Map, so without this every request after the
