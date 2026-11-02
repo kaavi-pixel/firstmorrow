@@ -129,6 +129,25 @@ export function createSphereRenderer(canvas, {
     if (pitch !== pitchTarget) pitch = Math.abs(pitchTarget - pitch) < 0.002 ? pitchTarget : pitch + (pitchTarget - pitch) * use;
   }
 
+  // A world has one camp, and everything anyone is doing starts there: the globe opens
+  // looking at it rather than at whichever side of the planet the camera happened to
+  // point at. The aim is solved rather than searched — the spin is a pitch and a yaw, so
+  // the two angles that bring the camp's own centre to the front of the disk are
+  // closed-form. There are two solutions a half turn apart and the one whose cosine is
+  // positive is taken, so the pitch stays in (-90°, 90°) and a drag continues from where
+  // the eye already is instead of jumping.
+  function aimAtCamp(geo) {
+    const id = geo && geo.camp;
+    const p = geo && geo.planet && Number.isInteger(id) ? geo.planet.cells[id]?.centre : null;
+    if (!p) { yaw = yawTarget = 0; pitch = pitchTarget = 0.25; return; }
+    const r = Math.hypot(p[1], p[2]);
+    let y = Math.atan2(p[1], p[2]);
+    let a = Math.atan2(-p[0], r);
+    if (Math.cos(y) < 0) { y += Math.PI; a = Math.atan2(-p[0], -r); }
+    if (y > Math.PI) y -= 2 * Math.PI; else if (y < -Math.PI) y += 2 * Math.PI;
+    yaw = yawTarget = a; pitch = pitchTarget = y;
+  }
+
   function draw(dt = 0) {
     const world = getWorld();
     const geo = world.geography;
@@ -136,7 +155,7 @@ export function createSphereRenderer(canvas, {
     if (geo !== geoRef) {
       geoRef = geo; pos = new Map(); sprite = new Map(); people = new Map();
       spinCache.spun = null;
-      yaw = 0; yawTarget = 0; pitch = 0.25; pitchTarget = 0.25; zoom = 1;
+      zoom = 1; aimAtCamp(geo);
     }
     if (layoutVersion !== geo.seed) { layoutVersion = geo.seed; resize(); }
     if (!w || !h) resize();
