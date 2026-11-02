@@ -104,8 +104,8 @@ form input[type=text],form input[type=password],select{width:100%;padding:0 12px
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 .btn.primary:hover{filter:brightness(1.08)}
 .btn.danger{color:var(--danger)}
-.welcome{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:16px;background:color-mix(in oklab,var(--bg) 45%,transparent)}
-.welcome-card{max-width:400px;padding:28px;border-radius:18px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--line)}
+.welcome{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:16px;pointer-events:none;background:color-mix(in oklab,var(--bg) 45%,transparent)}
+.welcome-card{max-width:400px;padding:28px;border-radius:18px;pointer-events:auto;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--line)}
 .welcome h1{font-size:var(--text-lg);font-weight:700;letter-spacing:-.02em;line-height:1.2}
 .welcome p{margin-top:10px;color:var(--muted);line-height:1.6}
 .welcome .row{margin-top:20px}
