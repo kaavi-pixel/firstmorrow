@@ -26,6 +26,18 @@ function coastBesideSea(S) {
 /** A walkable cell beside the camp: where anything about to be proposed goes. */
 const campSpot = S => neighbours(S.terrain, S.camp.at).find(at => walkable(S.terrain, at));
 
+/** Walkable ground with no sea beside it: the one place a still cannot work.
+ *  The camp is on the coast, so this looks past it rather than assuming its
+ *  neighbours are inland — the corners of the grid are water now, and a lake can
+ *  appear beside a cell that used to be nowhere near the sea. */
+function inlandSpot(S) {
+  for (const t of S.terrain.tiles.values()) {
+    if (!walkable(S.terrain, t.id)) continue;
+    if (neighbours(S.terrain, t.id).every(n => terrainAt(S.terrain, n)?.regionId !== 'sea')) return t;
+  }
+  return null;
+}
+
 test('an unknown declaration is refused outright', () => {
   const S = createWorld();
   assert.throws(() => applyDeclarations(S, actorAt(S.camp.at), { conjure: { gold: 5 } }), /Unknown declaration/);
@@ -48,17 +60,22 @@ test('a garden yields no more food than its soil allows', () => {
 
 test('fresh water comes only from the sea, and only at a rate', () => {
   const S = createWorld();
-  const inland = actorAt(S.camp.at);
-  S.structures.push({ id: 's1', name: 'Hut', at: campSpot(S), mass: 40, shelter: 0, built: true, progressHours: 9, laborHours: 9 });
-  assert.throws(() => applyDeclarations(S, inland, { labor: 4, make: { water: 4 } }), /beside the sea/);
+  const dry = inlandSpot(S);
+  assert.ok(dry, 'there is ground away from the sea to test with');
+  S.structures.push({ id: 's1', name: 'Hut', at: dry.id, mass: 40, shelter: 0, built: true, progressHours: 9, laborHours: 9 });
+  assert.throws(() => applyDeclarations(S, actorAt(dry.id), { labor: 4, make: { water: 4 } }), /beside the sea/);
 
-  const t = coastBesideSea(S);
-  S.structures.push({ id: 's2', name: 'Still', at: t.id, mass: 60, shelter: 0, built: true, progressHours: 9, laborHours: 9, store: { water: 0, food: 0, material: 0, soil: 0 } });
+  // A separate world for the still: `applyDeclarations` runs a process in the first
+  // structure beside whoever is asking, so a hut left standing in the same world could
+  // take the answer away from the still.
+  const W = createWorld();
+  const t = coastBesideSea(W);
+  W.structures.push({ id: 's2', name: 'Still', at: t.id, mass: 60, shelter: 0, built: true, progressHours: 9, laborHours: 9, store: { water: 0, food: 0, material: 0, soil: 0 } });
   const atSea = actorAt(t.id, { onward: true });
   const cap = 4 * RULES.stillLitersPerLaborHour;
-  assert.throws(() => applyDeclarations(S, atSea, { labor: 4, make: { water: cap + 1 } }), /per labour hour/);
-  applyDeclarations(S, atSea, { labor: 4, make: { water: cap - 1 } });
-  const still = S.structures.find(s => s.id === 's2');
+  assert.throws(() => applyDeclarations(W, atSea, { labor: 4, make: { water: cap + 1 } }), /per labour hour/);
+  applyDeclarations(W, atSea, { labor: 4, make: { water: cap - 1 } });
+  const still = W.structures.find(s => s.id === 's2');
   assert.ok(still.store.water > 0, 'the still filled up');
 });
 
