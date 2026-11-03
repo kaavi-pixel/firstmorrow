@@ -162,6 +162,33 @@ test('the land is the land: the same regions, finite, and every kind present', (
   assert.equal(P.cellM, CELL_M);
 });
 
+test('the twelve pentagons are water, so nobody has to look at them', () => {
+  // Euler's formula leaves no choice: a hex-tiled planet has exactly twelve five-sided
+  // cells. A five-sided tile of ground is the one place the tiling shows its seams, so
+  // the corners are put under the waterline — pushed by more than the land field's whole
+  // range, so no seed and no level can lift one ashore. The corner cell alone takes the
+  // bias; its neighbours take the ordinary coastal rule and ring it with shore.
+  for (const n of [8, 14, 32]) for (const seed of [2049, 7, 12345]) {
+    const P = worldPlanet({ seed, subdivisions: n });
+    const ashore = P.pentagons.filter(id => P.cells[id].regionId !== 'sea');
+    assert.deepEqual(ashore, [], `every corner is water at n=${n} seed=${seed}`);
+    for (const id of P.pentagons) {
+      assert.equal(P.cells[id].water, 0, 'a corner carries no water to draw');
+      assert.equal(P.cells[id].potable, 0, 'and nothing to drink');
+      assert.equal(P.cells[id].food, 0, 'and nothing to forage');
+      // A neighbour is sea already, or shore, or the spring's own ground, or polar rock —
+      // the cold rule is answered before the coast. Never bare interior or scrub, which
+      // would mean the corner was not water at all.
+      for (const j of P.cells[id].next) {
+        const r = P.cells[j].regionId;
+        const spring = P.spring.cells.includes(j);
+        assert.ok(r === 'sea' || r === 'coast' || spring || Math.abs(P.cells[j].p[1]) > 0.82,
+          `${j} beside corner ${id} is sea, shore, spring or polar rock`);
+      }
+    }
+  }
+});
+
 test('the camp is on the coast with water it can walk to, and it is the seed that picks it', () => {
   for (const seed of [2049, 7, 12345]) {
     const P = worldPlanet({ seed, subdivisions: 14 });
@@ -208,7 +235,10 @@ test('the reach and the author\'s writ are distances, and a bigger world is a bi
     seen.push({ n, ...b });
   }
   const at14 = seen.find(s => s.n === 14);
-  assert.equal(at14.span, 73, 'the camp\'s walk at the level the world is built at');
+  // 73 while the twelve pentagons were land. Now that they are water the seed's camp
+  // lands elsewhere and its walk is four steps longer; the reach and the writ did not
+  // move, because they are 8 m steps and not a share of the world.
+  assert.equal(at14.span, 77, 'the camp\'s walk at the level the world is built at');
   assert.equal(at14.reach, 24, 'the reach is the same 192 m it always was');
   assert.equal(at14.writ, 16, 'and so is the writ');
   // The rectangle's shares were 77% and 52% of a 31 step walk. The planet's land

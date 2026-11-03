@@ -5,6 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld } from '../kernel/world.mjs';
 import { createService, memoryStore, encodeState, decodeState, repairState } from '../kernel/store.mjs';
+import { worldPlanet } from '../public/hexasphere.mjs';
+import { LAND_VERSION } from '../public/terrain.mjs';
 
 // The spring is a place again: four cells three steps from camp, chosen by the
 // seed rather than by an offset from START.
@@ -81,4 +83,48 @@ test('a world saved before wild food existed is given it once, and only once', (
   S.terrain.tiles.get(springKey(S)).food = 0;
   repairState(S);
   assert.equal(S.terrain.tiles.get(springKey(S)).food, 0, 'used-up ground is not refilled');
+});
+
+test('a world saved while the twelve corners were land is re-surveyed, not re-founded', () => {
+  // The land changed; the places did not. The corner is the only kind of cell whose
+  // region the module decides differently now, and a saved world must take that change
+  // without moving a person, a structure or the camp — a change of land is not a change
+  // of address, and only a change of address earns a re-founding.
+  const S = createWorld({ seed: 2049 });
+  const P = worldPlanet({ seed: 2049, subdivisions: 14 });
+  const corner = P.pentagons[0];
+  const t = S.terrain.tiles.get(corner);
+  // Put the world back the way the old land left it: the corner ashore, carrying the
+  // reserves a scrub cell was born with, and no mark that the land was ever surveyed.
+  t.regionId = 'scrub'; t.water = 36; t.soil = 12; t.material = 38; t.potable = 12; t.food = 5000;
+  delete S.terrain.landVersion;
+  const terrain = S.terrain;
+  const people = S.people.map(p => p.at);
+  const camp = S.terrain.camp, spring = S.terrain.spring.slice();
+
+  const back = repairState(S);
+  assert.equal(back.terrain, terrain, 'the terrain object was not rebuilt');
+  assert.equal(back.refounded, undefined, 'the land changed, not the place');
+  assert.equal(back.terrain.tiles.get(corner).regionId, 'sea', 'the corner is water again');
+  assert.equal(back.terrain.tiles.get(corner).potable, 0, 'and carries nothing to drink');
+  assert.deepEqual(back.people.map(p => p.at), people, 'nobody moved');
+  assert.equal(back.terrain.camp, camp, 'the camp is where it was');
+  assert.deepEqual(back.terrain.spring, spring, 'so is the spring');
+  assert.equal(back.terrain.landVersion, LAND_VERSION, 'and the land is marked as re-surveyed');
+});
+
+test('the re-survey does not drown a cell something is standing on', () => {
+  // A corner with a structure on it cannot become water without drowning the structure.
+  // The land rule yields to what stands there; the cell stays ground and keeps its name.
+  const S = createWorld({ seed: 2049 });
+  const P = worldPlanet({ seed: 2049, subdivisions: 14 });
+  const corner = P.pentagons[0];
+  const t = S.terrain.tiles.get(corner);
+  t.regionId = 'scrub'; t.water = 36; t.potable = 12; t.food = 5000;
+  delete S.terrain.landVersion;
+  S.structures.push({ id: 'stand-on-the-corner', name: 'Test', at: corner, mass: 1, built: true });
+
+  repairState(S);
+  assert.equal(S.terrain.tiles.get(corner).regionId, 'scrub', 'the corner was not drowned');
+  assert.equal(S.terrain.tiles.get(corner).potable, 12, 'and its water was not taken');
 });

@@ -9,7 +9,7 @@
 // first attempt's world, its history, or its pre-exploration backup.
 
 import { randomUUID } from 'node:crypto';
-import { createTerrain, addWildFood, GEO_VERSION } from '../public/terrain.mjs';
+import { createTerrain, addWildFood, sinkCorners, GEO_VERSION } from '../public/terrain.mjs';
 import { createWorld } from './world.mjs';
 
 // Every world lives under one namespace. It is a knob and not a constant because a
@@ -53,6 +53,16 @@ export function repairState(S) {
   // A world saved before wild food existed gets it once, keeping everything it
   // has already used up.
   addWildFood(S.terrain);
+  // A world saved while the twelve pentagons were land. The land changed, the places
+  // did not, so this sinks the corners and re-founds nobody. The world's own camp, its
+  // own spring and everything standing on the ground are the world's, not the module's:
+  // a cell the world has already put something in is left exactly as it is.
+  const keep = new Set();
+  for (const b of S.structures || []) if (Number.isInteger(b.at)) keep.add(b.at);
+  for (const p of S.people || []) if (Number.isInteger(p.at)) keep.add(p.at);
+  if (Number.isInteger(S.terrain.camp)) keep.add(S.terrain.camp);
+  for (const id of S.terrain.spring || []) keep.add(id);
+  sinkCorners(S.terrain, keep);
   // A structure designed before the gate asked what it is for carries no
   // description, and its card would read empty to a visitor. Backfill a plain
   // statement of that rather than inventing a purpose for it.

@@ -16,10 +16,10 @@
 // the camp and the spring from the seed; there is no `START` and no `OASIS` to
 // offset from any more.
 
-import { worldPlanet, cellsWithin as ballWithin, cellDistance as stepsBetween } from './hexasphere.mjs';
+import { worldPlanet, cellsWithin as ballWithin, cellDistance as stepsBetween, LAND_VERSION } from './hexasphere.mjs';
 import { TILE_M, REGIONS, region } from './regions.mjs';
 
-export { TILE_M, REGIONS, region };
+export { TILE_M, REGIONS, region, LAND_VERSION };
 
 export const GEO_VERSION = 2;
 // How finely the icosahedron is subdivided. Level 14 is 1,962 cells and 186 m
@@ -65,7 +65,7 @@ export function createTerrain(seed = 2049, subdivisions = SUBDIVISIONS) {
     });
   }
   return {
-    version: GEO_VERSION, seed, subdivisions, tileM: TILE_M,
+    version: GEO_VERSION, landVersion: LAND_VERSION, seed, subdivisions, tileM: TILE_M,
     regions: REGIONS.map(r => ({ id: r.id, name: r.name, color: r.color })),
     tiles,
     camp: planet.camp,
@@ -99,6 +99,48 @@ export function addWildFood(g) {
   for (const t of g.tiles.values()) if (t.food > 0) g.forage.push(t.id);
   g.springs = [];
   for (const t of g.tiles.values()) if (t.potable > 0) g.springs.push(t.id);
+  return g;
+}
+
+/**
+ * A world saved while the twelve corners were still land.
+ *
+ * The land changed in exactly one way: the corner cells of the grid are water now, and
+ * the ground beside them is shore. That is not a change of place — the cells are the
+ * same cells and everything standing on them keeps standing there — so this re-founds
+ * nobody. It touches the corners and their neighbours and nothing else: the world's own
+ * camp, its own spring and everything standing on the ground belong to the world, and
+ * `keep` names the cells that must not be rewritten. A cell the world has already put
+ * something in is left exactly as it is, even where the new rule would say otherwise.
+ */
+export function sinkCorners(g, keep = new Set()) {
+  if (!g || !(g.tiles instanceof Map) || g.tiles.size === 0 || g.landVersion === LAND_VERSION) return g;
+  const planet = graphOf(g);
+  let changed = 0;
+  const adopt = id => {
+    const t = g.tiles.get(id), c = planet.cells[id];
+    if (!t || !c || keep.has(id)) return;
+    // Only the corner water and the shore beside it. A corner's neighbour that the new
+    // rule still calls rock or scrub is left alone, and so is every cell further out.
+    if (c.regionId !== 'sea' && c.regionId !== 'coast') return;
+    if (t.regionId === c.regionId) return;
+    t.regionId = c.regionId;
+    t.water = c.water; t.soil = c.soil; t.material = c.material;
+    t.potable = c.potable; t.food = c.food;
+    changed++;
+  };
+  for (const id of planet.pentagons) {
+    adopt(id);
+    for (const j of planet.neighbours[id]) adopt(j);
+  }
+  if (changed) {
+    g.springs = []; g.forage = [];
+    for (const t of g.tiles.values()) {
+      if (t.potable > 0) g.springs.push(t.id);
+      if (t.food > 0) g.forage.push(t.id);
+    }
+  }
+  g.landVersion = LAND_VERSION;
   return g;
 }
 

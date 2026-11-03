@@ -195,17 +195,72 @@ function noise3(p, seed, scale) {
 }
 const reliefAt = (p, seed) => noise3(p, seed, 2.1) * 0.66 + noise3(p, seed + 977, 4.4) * 0.34;
 
+/** Where the waterline is. Below this the ground is sea. */
+export const SEA_LEVEL = 0.44;
+
+/**
+ * The twelve corners are water.
+ *
+ * Euler's formula leaves no choice: a planet tiled in hexagons has exactly twelve
+ * five-sided cells, and they sit where the icosahedron's corners were. Everywhere else
+ * the tiling repeats, so a corner is the one place a tile's own shape can betray the
+ * grid. A five-sided tile of ground reads as a flaw in the map; the same tile under
+ * water reads as water, and nobody counts the sides of a lake.
+ *
+ * A corner is pushed below the waterline by more than the whole range the land field
+ * has above it — relief is under 1 and the waterline is 0.44 — so no seed and no level
+ * can lift one back ashore. Its neighbours are left to the ordinary coastal rule,
+ * which rings the corner with shore: a small sea, with a beach.
+ */
+export const CORNER_SEA = Object.freeze({ depth: 0.62 });
+
+/**
+ * What the land is made of, as a version of its own.
+ *
+ * `GEO_VERSION` says how a place is *addressed*, and a change to it is a change of
+ * world: a coordinate names nothing on a planet, so such a record is re-founded. This
+ * number says what the ground is shaped like, and a change to it is not a change of
+ * place — the cells are the same cells, everything standing on them stays where it is,
+ * and a saved world can simply be re-surveyed.
+ *
+ * 1: pentagons ashore. 2: the twelve corners are water.
+ */
+export const LAND_VERSION = 2;
+
+/** Steps from every cell to the nearest corner: a walk out from the twelve over the
+ *  graph, so it needs no coordinates and is the same rule at every level. */
+function cornerSteps(planet) {
+  const step = new Array(planet.cells.length).fill(Infinity);
+  let ring = planet.pentagons.slice();
+  for (const id of ring) step[id] = 0;
+  for (let d = 1; ring.length; d++) {
+    const next = [];
+    for (const i of ring) for (const j of planet.neighbours[i]) {
+      if (step[j] !== Infinity) continue;
+      step[j] = d; next.push(j);
+    }
+    ring = next;
+  }
+  return step;
+}
+
 /** Tell each cell what it is made of. Deterministic, and every reserve is finite. */
 export function shapePlanet(planet) {
   const seed = planet.seed;
+  // The height of the ground, once for every cell. Classification asks for a cell's
+  // own relief and for each neighbour's, so sampling it inside the loop would read the
+  // same noise up to seven times, and reading it twice would let a corner be water in
+  // one question and land in the other.
+  const step = cornerSteps(planet);
+  const wet = planet.cells.map(c => reliefAt(c.p, seed) - (step[c.id] === 0 ? CORNER_SEA.depth : 0));
   for (const c of planet.cells) {
     const p = c.p;
-    const land = reliefAt(p, seed);
+    const land = wet[c.id];
     const cold = Math.abs(p[1]);                        // the poles are bare rock
     let id;
-    if (land < 0.44) id = 'sea';
+    if (land < SEA_LEVEL) id = 'sea';
     else {
-      const coastal = c.next.some(j => reliefAt(planet.cells[j].p, seed) < 0.44);
+      const coastal = c.next.some(j => wet[j] < SEA_LEVEL);
       const rocky = cold > 0.62 || noise3(p, seed + 313, 5.0) > 0.62;
       id = cold > 0.82 ? 'rock' : coastal ? 'coast' : rocky ? 'rock' : land > 0.55 ? 'scrub' : 'interior';
     }

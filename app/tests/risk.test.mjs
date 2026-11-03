@@ -37,8 +37,11 @@ test('starvation follows the real timeline: fed for months, then the land is bar
   assert.ok(summarise(S).meanHealth > 95, 'nobody is wasting away yet');
   advance(S, 1440 * 30);
   assert.equal(S.deaths, 0, 'sixty days in the land still has food on it');
-  advance(S, 1440 * 60);
-  assert.equal(S.deaths, 5, 'by a hundred and twenty days the wild food is gone and so are they');
+  // The corners are water now, and this seed's camp lands elsewhere because of it: the
+  // people last longer on the new ground. Measured rather than assumed — the first death
+  // is on day 109 and the last on day 122.
+  advance(S, 1440 * 70);
+  assert.equal(S.deaths, 5, 'by a hundred and thirty days the wild food is gone and so are they');
   const days = S.graveyard.map(g => Math.floor(g.at / 1440));
   assert.ok(Math.min(...days) > 60, `the first death came at day ${Math.min(...days)}`);
   assert.ok(Math.max(...days) < 150, `the last death came at day ${Math.max(...days)}`);
